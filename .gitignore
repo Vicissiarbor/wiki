@@ -1,0 +1,21 @@
+# Dependencies (test-only; the deployed site has none)
+node_modules/
+
+# Local toolchain (virtualenv used to regenerate the pinyin table)
+.tools/
+
+# Local server runtime state
+server/data/
+server/*.log
+*.local.json
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Python
+__pycache__/
+*.pyc
