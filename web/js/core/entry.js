@@ -26,6 +26,40 @@ export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._~-]*$/;
 /** Optional per-entry override for the "sort by initial" grouping. */
 export const INITIAL_PATTERN = /^[A-Z#]$/;
 
+/**
+ * Timestamps may be written to the day (`2026-10-04`) or as full ISO-8601.
+ * Hand-maintained entries only need day precision, so both are accepted and the
+ * day-only form is shown exactly as written.
+ */
+export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A full timestamp: `2026-10-04T11:28`, `2026-10-04T11:28:00Z`, `+08:00` offsets,
+ * and (for convenience while writing) a space instead of `T`.
+ */
+export const DATETIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+/**
+ * @param {unknown} value
+ * @returns {boolean} True for '' (the fields are optional), a day-precision
+ *   date, or a full ISO-8601 timestamp. Deliberately stricter than
+ *   `Date.parse`, which happily accepts things like `2026/10/04`.
+ */
+export function isValidTimestamp(value) {
+  const text = cleanText(value);
+  if (text === '') {
+    return true;
+  }
+  if (DATE_PATTERN.test(text)) {
+    return !Number.isNaN(Date.parse(`${text}T00:00:00Z`));
+  }
+  if (!DATETIME_PATTERN.test(text)) {
+    return false;
+  }
+  return !Number.isNaN(Date.parse(text.replace(' ', 'T')));
+}
+
 /** Keys of a stored entry, in the order used when serializing. */
 export const ENTRY_KEYS = Object.freeze([
   'id',
@@ -154,6 +188,9 @@ function cleanTimestamp(value) {
   if (text === '') {
     return '';
   }
+  if (DATE_PATTERN.test(text)) {
+    return isValidTimestamp(text) ? text : '';
+  }
   const parsed = Date.parse(text);
   return Number.isNaN(parsed) ? '' : new Date(parsed).toISOString();
 }
@@ -224,6 +261,15 @@ export function inspectEntry(raw, context = {}) {
   }
   if (entry.tags.length > LIMITS.TAGS) {
     issues.push({ field: 'tags', code: 'too-many', message: `标签最多 ${LIMITS.TAGS} 个。` });
+  }
+  for (const field of ['createdAt', 'updatedAt']) {
+    if (!isValidTimestamp(entry[field])) {
+      issues.push({
+        field,
+        code: 'format',
+        message: `${field} 需要写成 YYYY-MM-DD（精确到日）或完整 ISO-8601 时间。`,
+      });
+    }
   }
   for (const tag of entry.tags) {
     if (tag.length > LIMITS.TAG) {
@@ -381,7 +427,9 @@ export function applyEntryPatch(existing, patch, options = {}) {
   const entry = {
     ...merged,
     createdAt: existing.createdAt || timestamp(options.now),
-    updatedAt: timestamp(options.now),
+    // An explicit `updatedAt` is kept as written (day precision stays day
+    // precision); otherwise the edit is stamped with the current time.
+    updatedAt: cleanTimestamp(patch.updatedAt) || timestamp(options.now),
   };
   return assertValidEntry(entry, { siblings: [] });
 }

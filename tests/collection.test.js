@@ -102,6 +102,35 @@ describe('EntryCollection', () => {
     assert.equal(document.version, 1);
   });
 
+  it('derives the latest update from the entries, not from a hand-maintained field', () => {
+    const { collection } = EntryCollection.fromDocument({
+      version: 1,
+      updatedAt: '2020-01-01',
+      entries: [
+        { id: 'a', name: 'A', updatedAt: '2026-10-04' },
+        { id: 'b', name: 'B', createdAt: '2026-09-01T08:00:00.000Z' },
+        { id: 'c', name: 'C', updatedAt: '2025-12-31' },
+      ],
+    });
+    assert.equal(collection.latestUpdatedAt(), '2026-10-04');
+  });
+
+  it('prefers updatedAt over createdAt and copes with missing dates', () => {
+    const { collection } = EntryCollection.fromDocument({
+      entries: [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B', createdAt: '2026-01-02', updatedAt: '2025-01-01' },
+      ],
+    });
+    // '2026-01-02' (createdAt) wins over the older updatedAt of that entry.
+    assert.equal(collection.latestUpdatedAt(), '2026-01-02');
+  });
+
+  it('returns an empty string when no entry carries a date', () => {
+    const { collection } = EntryCollection.fromDocument({ entries: [{ id: 'a', name: 'A' }] });
+    assert.equal(collection.latestUpdatedAt(), '');
+  });
+
   it('hands out frozen entries so views cannot corrupt the snapshot', () => {
     const { collection } = EntryCollection.fromDocument(sample());
     const entry = collection.byId('a');

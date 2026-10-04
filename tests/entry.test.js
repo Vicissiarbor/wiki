@@ -10,6 +10,7 @@ import {
   cleanText,
   createEntry,
   inspectEntry,
+  isValidTimestamp,
   normalizeEntry,
   shortHash,
 } from '../web/js/core/entry.js';
@@ -104,6 +105,41 @@ describe('inspectEntry', () => {
       assert.ok(error.issues.length > 0);
       assert.match(error.describe(), /词条数据不合法/);
     }
+  });
+});
+
+describe('timestamps', () => {
+  it('accepts a day-precision date', () => {
+    assert.equal(isValidTimestamp('2026-10-04'), true);
+    const { issues } = inspectEntry({ id: 'a', name: 'A', updatedAt: '2026-10-04' });
+    assert.deepEqual(issues, []);
+  });
+
+  it('still accepts full ISO-8601 timestamps', () => {
+    assert.equal(isValidTimestamp('2026-10-04T11:28:00.000Z'), true);
+    const { issues } = inspectEntry({ id: 'a', name: 'A', createdAt: '2026-10-04T11:28:00.000Z' });
+    assert.deepEqual(issues, []);
+  });
+
+  it('accepts an empty timestamp', () => {
+    assert.equal(isValidTimestamp(''), true);
+    assert.deepEqual(inspectEntry({ id: 'a', name: 'A' }).issues, []);
+  });
+
+  it('rejects nonsense and impossible dates', () => {
+    for (const value of ['昨天', '2026/10/04', '2026-13-01', '20261004']) {
+      assert.equal(isValidTimestamp(value), false, value);
+      const { issues } = inspectEntry({ id: 'a', name: 'A', updatedAt: value });
+      assert.equal(issues.length, 1, value);
+      assert.equal(issues[0].field, 'updatedAt');
+      assert.equal(issues[0].code, 'format');
+    }
+  });
+
+  it('keeps a day-precision date as written when patching an entry', () => {
+    const created = createEntry({ name: 'Alpha' }, { now: new Date('2026-01-01T00:00:00.000Z') });
+    const patched = applyEntryPatch(created, { updatedAt: '2026-10-04' });
+    assert.equal(patched.updatedAt, '2026-10-04');
   });
 });
 

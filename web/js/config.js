@@ -10,7 +10,7 @@
 
 /**
  * @typedef {object} AppConfig
- * @property {{title: string, tagline: string, footer: string, updatedLabel: string}} site
+ * @property {{title: string, tagline: string, updatedLabel: string}} site
  * @property {{url: string, timeoutMs: number}} data
  * @property {{budgetMs: number, maxResults: number}} search
  */
@@ -20,7 +20,6 @@ export const DEFAULT_CONFIG = {
   site: {
     title: '概念词条库',
     tagline: '输入名称查询，或直接翻阅下面的索引。',
-    footer: '纯静态站点：内容保存在 data/entries.json，通过提交仓库更新。',
     updatedLabel: '更新于',
   },
   data: {
@@ -75,7 +74,6 @@ export function normalizeConfig(raw) {
   const config = mergeConfig(structuredClone(DEFAULT_CONFIG), raw);
   config.site.title = String(config.site.title ?? '').trim() || DEFAULT_CONFIG.site.title;
   config.site.tagline = String(config.site.tagline ?? '').trim();
-  config.site.footer = String(config.site.footer ?? '').trim();
   config.site.updatedLabel =
     String(config.site.updatedLabel ?? '').trim() || DEFAULT_CONFIG.site.updatedLabel;
   config.data.url = String(config.data.url ?? '').trim() || DEFAULT_CONFIG.data.url;

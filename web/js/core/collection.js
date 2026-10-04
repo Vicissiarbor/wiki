@@ -254,6 +254,30 @@ export class EntryCollection {
   }
 
   /**
+   * The freshest date found in the entries themselves.
+   *
+   * The footer must not depend on a hand-maintained document-level timestamp
+   * (it goes stale the moment you forget to bump it), so it is derived from the
+   * entries instead: the newest `updatedAt`, falling back to `createdAt`.
+   *
+   * Both `YYYY-MM-DD` and ISO-8601 compare correctly as plain strings, and the
+   * result is always trimmed to day precision.
+   *
+   * @returns {string} `YYYY-MM-DD`, or '' when no entry carries a date.
+   */
+  latestUpdatedAt() {
+    let latest = '';
+    for (const entry of this._entries) {
+      for (const value of [entry.updatedAt, entry.createdAt]) {
+        if (typeof value === 'string' && value.length >= 10 && value > latest) {
+          latest = value;
+        }
+      }
+    }
+    return latest === '' ? '' : latest.slice(0, 10);
+  }
+
+  /**
    * @param {{updatedAt?: string}} [meta]
    * @returns {{version: number, updatedAt: string, entries: import('./entry.js').Entry[]}}
    *   A plain object with keys in a stable order, ready to be serialized.

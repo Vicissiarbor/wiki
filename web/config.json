@@ -2,7 +2,6 @@
   "site": {
     "title": "概念词条库",
     "tagline": "输入名称查询，或直接翻阅下面的索引。",
-    "footer": "纯静态站点：内容保存在 data/entries.json，通过提交仓库更新。",
     "updatedLabel": "更新于"
   },
   "data": {

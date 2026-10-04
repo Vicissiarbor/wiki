@@ -10,13 +10,18 @@ import { findMatches } from '../core/search.js';
 import { el, fragment, highlight } from './dom.js';
 
 /**
- * @param {string} value ISO timestamp.
- * @returns {string} A short, readable date.
+ * @param {string} value A `YYYY-MM-DD` date or a full ISO-8601 timestamp.
+ * @returns {string} The date part, shown exactly as written when it is already
+ *   day-precision (parsing it through `Date` would shift it across time zones).
  */
 function formatDate(value) {
-  const date = new Date(value);
+  const text = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+  const date = new Date(text);
   if (Number.isNaN(date.getTime())) {
-    return String(value);
+    return text;
   }
   const pad = (/** @type {number} */ number) => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
