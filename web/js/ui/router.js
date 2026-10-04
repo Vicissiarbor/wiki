@@ -1,21 +1,20 @@
 /**
- * Hash router: keeps the URL in sync with the current search so any view can be
- * bookmarked and shared (`…#/?q=%E7%86%B5&mode=exact&e=entropy`).
+ * Hash router.
  *
- * The hash is used (instead of the path) so the site keeps working on GitHub
- * Pages project URLs (`user.github.io/repo/`) without server rewrites.
+ * Two routes only, both usable without a server that rewrites paths:
+ *
+ *   #/              索引（可选 #/?q=… 表示一次搜索）
+ *   #/e/<id>        某个词条的页面
+ *
+ * A hash router is required here: the site is published from a project
+ * subdirectory and there is no way to rewrite `/ladr/e/entropy` to
+ * `index.html` on that host.
  */
 
-/**
- * @typedef {object} Route
- * @property {string} query
- * @property {string} mode
- * @property {string} letter
- * @property {string} entryId
- */
+/** @typedef {{view: 'index'|'entry', entryId: string, query: string}} Route */
 
 /** @type {Route} */
-export const EMPTY_ROUTE = Object.freeze({ query: '', mode: '', letter: '', entryId: '' });
+export const INDEX_ROUTE = Object.freeze({ view: 'index', entryId: '', query: '' });
 
 /**
  * @param {string} hash Location hash, with or without the leading '#'.
@@ -23,53 +22,57 @@ export const EMPTY_ROUTE = Object.freeze({ query: '', mode: '', letter: '', entr
  */
 export function parseHash(hash) {
   const text = String(hash ?? '').replace(/^#/, '');
-  const questionMark = text.indexOf('?');
-  if (text !== '' && questionMark === -1 && !text.startsWith('/')) {
-    return { ...EMPTY_ROUTE };
+  if (text === '' || text === '/') {
+    return { ...INDEX_ROUTE };
   }
-  const params = new URLSearchParams(questionMark === -1 ? '' : text.slice(questionMark + 1));
-  return {
-    query: params.get('q') ?? '',
-    mode: params.get('mode') ?? '',
-    letter: params.get('letter') ?? '',
-    entryId: params.get('e') ?? '',
-  };
+  if (text.startsWith('/e/')) {
+    const raw = text.slice(3);
+    let entryId = raw;
+    try {
+      entryId = decodeURIComponent(raw);
+    } catch {
+      /* keep the raw value */
+    }
+    return { view: 'entry', entryId, query: '' };
+  }
+  const questionMark = text.indexOf('?');
+  if (questionMark !== -1) {
+    const params = new URLSearchParams(text.slice(questionMark + 1));
+    return { view: 'index', entryId: '', query: params.get('q') ?? '' };
+  }
+  return { ...INDEX_ROUTE };
 }
 
 /**
- * @param {{query: string, mode: string, letter: string, entryId: string}} state
- * @returns {string} A hash (including the leading '#').
+ * @param {Route} route
+ * @returns {string} A hash including the leading '#'.
  */
-export function buildHash(state) {
-  const params = new URLSearchParams();
-  if (state.query) {
-    params.set('q', state.query);
+export function buildHash(route) {
+  if (route.view === 'entry' && route.entryId !== '') {
+    return `#/e/${encodeURIComponent(route.entryId)}`;
   }
-  if (state.mode) {
-    params.set('mode', state.mode);
-  }
-  if (state.letter) {
-    params.set('letter', state.letter);
-  }
-  if (state.entryId) {
-    params.set('e', state.entryId);
-  }
-  const query = params.toString();
-  return query === '' ? '#/' : `#/?${query}`;
+  return route.query ? `#/?q=${encodeURIComponent(route.query)}` : '#/';
 }
 
 /**
  * @param {{onChange: (route: Route) => void, win?: Window}} options
- * @returns {{start: () => void, stop: () => void, sync: (state: object) => void,
- *   buildLink: (state: object) => string}}
+ * @returns {{start: () => void, stop: () => void, sync: (route: Route) => void,
+ *   linkFor: (route: Route) => string, absoluteLinkFor: (route: Route) => string}}
  */
 export function createRouter(options) {
   const win = options.win ?? window;
-  let lastWritten = '';
+  /**
+   * Set only when we had to fall back to assigning `location.hash` (which fires
+   * `hashchange`, unlike `history.replaceState`). It suppresses exactly one echo
+   * of our own write — a stateless "did we write this value?" guess would also
+   * swallow a genuine navigation back to a previously written hash.
+   */
+  let expectEcho = false;
 
   const handle = () => {
-    if (win.location.hash === lastWritten) {
-      return; // Our own update: do not echo it back into the app state.
+    if (expectEcho) {
+      expectEcho = false;
+      return;
     }
     options.onChange(parseHash(win.location.hash));
   };
@@ -82,28 +85,40 @@ export function createRouter(options) {
       win.removeEventListener('hashchange', handle);
     },
     /**
-     * Write the current state into the URL without triggering a reload.
+     * Reflect the current state in the address bar.
      *
-     * @param {object} state
+     * @param {Route} route
      */
-    sync(state) {
-      const hash = buildHash(state);
-      if (win.location.hash === hash) {
+    sync(route) {
+      const current = win.location.hash;
+      // Never clobber a plain in-page anchor (`#view`) the user just clicked.
+      if (current !== '' && !current.startsWith('#/')) {
         return;
       }
-      lastWritten = hash;
+      const hash = buildHash(route);
+      if (current === hash) {
+        return;
+      }
       try {
         win.history.replaceState(null, '', hash);
       } catch {
+        expectEcho = true;
         win.location.hash = hash;
       }
     },
     /**
-     * @param {object} state
-     * @returns {string} Absolute URL for the given state.
+     * @param {Route} route
+     * @returns {string} A relative link usable inside the page.
      */
-    buildLink(state) {
-      return `${win.location.origin}${win.location.pathname}${buildHash(state)}`;
+    linkFor(route) {
+      return buildHash(route);
+    },
+    /**
+     * @param {Route} route
+     * @returns {string} A full URL for "copy this link" style sharing.
+     */
+    absoluteLinkFor(route) {
+      return `${win.location.origin}${win.location.pathname}${buildHash(route)}`;
     },
   };
 }

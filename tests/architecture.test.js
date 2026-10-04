@@ -1,9 +1,12 @@
 /**
- * Architecture guard: the shared core must stay free of DOM and Node APIs.
+ * Architecture guards.
  *
- * The same modules are imported by the browser, by the Node backend
- * (server/lib/store.js) and by this test suite, which only works while they
- * remain pure. This test fails the moment someone reaches for `document`.
+ * Three rules this project actually depends on:
+ *   1. the shared core stays free of DOM and Node APIs (so it is testable and
+ *      could be reused anywhere);
+ *   2. every reference is relative — the site is published from a project
+ *      subdirectory and must survive being moved;
+ *   3. the site is read-only: no write requests, no tokens, nothing to abuse.
  */
 
 import assert from 'node:assert/strict';
@@ -14,6 +17,7 @@ import { describe, it } from 'node:test';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHARED_DIRS = ['web/js/core', 'web/js/data'];
+const SITE_JS_DIRS = ['web/js'];
 
 /** Browser/DOM globals the shared core must not touch directly. */
 const FORBIDDEN = [
@@ -29,16 +33,25 @@ const FORBIDDEN = [
 ];
 
 /**
- * @param {string} file
- * @returns {Promise<string>} File content.
+ * Blank out string literals and comments so the scan only looks at real code
+ * (a doc comment may legitimately mention `localStorage`).
+ *
+ * @param {string} source
+ * @returns {string}
  */
-async function read(file) {
-  return fs.readFile(file, 'utf8');
+function stripLiteralsAndComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^\s*\/\/.*$/gm, ' ')
+    .replace(/(\s)\/\/[^\n]*/g, '$1 ')
+    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``');
 }
 
 /**
- * @param {string} dir
- * @returns {Promise<string[]>} Absolute paths of every .js file.
+ * @param {string} dir Repository-relative directory.
+ * @returns {Promise<string[]>} Absolute paths of every .js file below it.
  */
 async function listModules(dir) {
   const absolute = path.join(REPO_ROOT, dir);
@@ -56,39 +69,30 @@ async function listModules(dir) {
 }
 
 /**
- * Blank out string literals and comments so the scan only looks at real code
- * (a doc comment may legitimately mention `localStorage`).
- *
- * @param {string} source
- * @returns {string}
+ * @param {string[]} dirs
+ * @returns {Promise<Array<{file: string, source: string, code: string}>>}
  */
-function stripLiteralsAndComments(source) {
-  return (
-    source
-      // Comments first: they may contain quotes and backticks.
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/^\s*\/\/.*$/gm, ' ')
-      .replace(/(\s)\/\/[^\n]*/g, '$1 ')
-      // Then string literals, so their content is not mistaken for code.
-      .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-      .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
-      .replace(/`(?:\\[\s\S]|[^`\\])*`/g, '``')
-  );
+async function readModules(dirs) {
+  const files = (await Promise.all(dirs.map(listModules))).flat();
+  const modules = [];
+  for (const file of files) {
+    const source = await fs.readFile(file, 'utf8');
+    modules.push({ file: path.relative(REPO_ROOT, file), source, code: stripLiteralsAndComments(source) });
+  }
+  return modules;
 }
 
 describe('shared core purity', () => {
-  it('has no DOM or Node dependencies in web/js/core and web/js/data', async () => {
-    const files = (await Promise.all(SHARED_DIRS.map(listModules))).flat();
-    assert.ok(files.length >= 12, `expected to scan the shared modules, saw ${files.length}`);
+  it('keeps DOM and Node APIs out of web/js/core and web/js/data', async () => {
+    const modules = await readModules(SHARED_DIRS);
+    assert.ok(modules.length >= 8, `expected to scan the shared modules, saw ${modules.length}`);
 
     const violations = [];
-    for (const file of files) {
-      const source = stripLiteralsAndComments(await read(file));
-      const lines = source.split('\n');
+    for (const { file, code } of modules) {
       for (const { pattern, label } of FORBIDDEN) {
-        lines.forEach((line, index) => {
+        code.split('\n').forEach((line, index) => {
           if (pattern.test(line)) {
-            violations.push(`${path.relative(REPO_ROOT, file)}:${index + 1} uses ${label}`);
+            violations.push(`${file}:${index + 1} uses ${label}`);
           }
         });
       }
@@ -96,17 +100,16 @@ describe('shared core purity', () => {
     assert.deepEqual(violations, []);
   });
 
-  it('only imports from the shared core (no ui/ or server/ dependency)', async () => {
-    const files = (await Promise.all(SHARED_DIRS.map(listModules))).flat();
+  it('lets the shared core import only the shared core', async () => {
+    const modules = await readModules(SHARED_DIRS);
     const violations = [];
-    for (const file of files) {
-      const source = await read(file);
+    for (const { file, source } of modules) {
       for (const match of source.matchAll(/from\s+'([^']+)'/g)) {
         const specifier = match[1];
         if (!specifier.startsWith('.')) {
-          violations.push(`${path.relative(REPO_ROOT, file)} imports ${specifier}`);
-        } else if (/\/ui\/|\/server\/|\/util\//.test(specifier)) {
-          violations.push(`${path.relative(REPO_ROOT, file)} imports ${specifier}`);
+          violations.push(`${file} imports ${specifier}`);
+        } else if (/\/ui\/|\/util\//.test(specifier)) {
+          violations.push(`${file} imports ${specifier}`);
         }
       }
     }
@@ -114,14 +117,88 @@ describe('shared core purity', () => {
   });
 
   it('keeps the browser-only helpers out of the shared core', async () => {
-    const utilFiles = await listModules('web/js/util');
-    const names = utilFiles.map((file) => path.basename(file));
-    assert.deepEqual(names.sort(), ['storage.js', 'timing.js']);
+    const names = (await listModules('web/js/util')).map((file) => path.basename(file));
+    assert.deepEqual(names.sort(), ['storage.js']);
+  });
+});
+
+describe('portability: relative paths only', () => {
+  it('uses relative import specifiers everywhere in the site', async () => {
+    const modules = await readModules(SITE_JS_DIRS);
+    const violations = [];
+    for (const { file, source } of modules) {
+      for (const match of source.matchAll(/from\s+'([^']+)'/g)) {
+        if (!match[1].startsWith('.')) {
+          violations.push(`${file} imports ${match[1]}`);
+        }
+      }
+    }
+    assert.deepEqual(violations, []);
   });
 
-  it('is actually reused by the backend', async () => {
-    const store = await read(path.join(REPO_ROOT, 'server/lib/store.js'));
-    assert.match(store, /from '\.\.\/\.\.\/web\/js\/core\/entry\.js'/);
-    assert.match(store, /from '\.\.\/\.\.\/web\/js\/data\/source\.js'/);
+  it('references assets in the HTML relatively', async () => {
+    const pages = ['web/index.html', 'web/404.html'];
+    const violations = [];
+    for (const page of pages) {
+      const html = await fs.readFile(path.join(REPO_ROOT, page), 'utf8');
+      for (const [, attribute, value] of html.matchAll(/\b(src|href)="([^"]+)"/g)) {
+        if (value.startsWith('#') || value.startsWith('./') || value.startsWith('../')) {
+          continue;
+        }
+        violations.push(`${page} ${attribute}="${value}"`);
+      }
+    }
+    assert.deepEqual(violations, []);
+  });
+
+  it('never fetches an absolute URL', async () => {
+    const modules = await readModules(['web/js']);
+    const violations = [];
+    for (const { file, source } of modules) {
+      for (const match of source.matchAll(/\bfetch(?:Impl)?\s*\(\s*(['"`])([^'"`]*)\1/g)) {
+        violations.push(`${file} fetches ${match[2]}`);
+      }
+      if (/\bnew\s+URL\s*\(\s*['"`]http/.test(source)) {
+        violations.push(`${file} builds an absolute URL`);
+      }
+    }
+    assert.deepEqual(violations, []);
+  });
+
+  it('keeps the configured data path relative', async () => {
+    const config = JSON.parse(await fs.readFile(path.join(REPO_ROOT, 'web/config.json'), 'utf8'));
+    assert.equal(config.data.url.startsWith('./'), true, config.data.url);
+  });
+});
+
+describe('read-only site', () => {
+  it('has no server-side code left', async () => {
+    const entries = await fs.readdir(REPO_ROOT);
+    assert.ok(!entries.includes('server'), 'the self-hosted backend must be gone');
+  });
+
+  it('never issues a write request or carries a token', async () => {
+    const modules = await readModules(['web/js']);
+    const violations = [];
+    for (const { file, code } of modules) {
+      if (/method\s*:\s*['"]?(POST|PUT|PATCH|DELETE)/i.test(code)) {
+        violations.push(`${file} sends a write method`);
+      }
+      if (/\bAuthorization\b/.test(code) || /Bearer\s/.test(code)) {
+        violations.push(`${file} mentions authentication`);
+      }
+      if (/\bXMLHttpRequest\b/.test(code)) {
+        violations.push(`${file} uses XMLHttpRequest`);
+      }
+    }
+    assert.deepEqual(violations, []);
+  });
+
+  it('never writes to storage outside the cache helper', async () => {
+    const modules = await readModules(['web/js']);
+    const writers = modules
+      .filter(({ code }) => /\.setItem\s*\(/.test(code))
+      .map(({ file }) => file);
+    assert.deepEqual(writers, ['web/js/util/storage.js']);
   });
 });

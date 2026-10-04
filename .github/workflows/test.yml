@@ -20,14 +20,15 @@ jobs:
           node-version: '22'
           cache: npm
 
-      # jsdom is the only dependency, and it is used by tests only.
+      # jsdom is the only dependency, and it is used by the tests only.
       - name: Install dev dependencies
         run: npm ci
 
       - name: Run the test suite
         run: npm test
 
-      - name: Check the data file
+      # Catches a hand-edited JSON file before it reaches the published site.
+      - name: Validate the data file
         run: node -e "
           const fs = require('node:fs');
           const doc = JSON.parse(fs.readFileSync('web/data/entries.json', 'utf8'));

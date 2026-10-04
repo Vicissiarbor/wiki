@@ -1,8 +1,8 @@
 {
   "name": "search-ladr",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "SearchLADR - a static, dependency-free glossary site for personal concept entries, with exact and regular-expression search.",
+  "description": "SearchLADR - a static, retro, dependency-free glossary site: type a concept name (exact or regex) or browse the A-Z index.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -11,8 +11,7 @@
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
     "test:watch": "node --test --watch \"tests/**/*.test.js\"",
-    "start": "node server/index.js",
-    "dev": "node server/index.js --port 8787 --static-root web --data web/data/entries.json --read-only",
+    "preview": "node tools/serve.js --port 8080 --root web",
     "gen:pinyin": ".tools/venv/bin/python tools/gen_pinyin_table.py"
   },
   "devDependencies": {

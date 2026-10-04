@@ -2,53 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { createStorage } from '../web/js/util/storage.js';
-import { debounce, delay } from '../web/js/util/timing.js';
-
-describe('debounce', () => {
-  it('runs once after the quiet period with the latest arguments', async () => {
-    /** @type {string[]} */
-    const seen = [];
-    const fn = debounce((value) => seen.push(value), 15);
-    fn('a');
-    fn('b');
-    fn('c');
-    assert.deepEqual(seen, []);
-    await delay(40);
-    assert.deepEqual(seen, ['c']);
-  });
-
-  it('fires at least once during a long burst (maxWaitMs)', async () => {
-    let calls = 0;
-    const fn = debounce(() => (calls += 1), 30, { maxWaitMs: 20 });
-    const timer = setInterval(() => fn(), 5);
-    await delay(90);
-    clearInterval(timer);
-    fn.cancel();
-    assert.ok(calls >= 2, `expected at least 2 calls, got ${calls}`);
-  });
-
-  it('cancel drops a pending call and flush runs it', async () => {
-    let calls = 0;
-    const fn = debounce(() => (calls += 1), 20);
-    fn();
-    assert.equal(fn.pending(), true);
-    fn.cancel();
-    await delay(35);
-    assert.equal(calls, 0);
-    fn();
-    fn.flush();
-    assert.equal(calls, 1);
-  });
-
-  it('passes every argument through', async () => {
-    /** @type {unknown[][]} */
-    const seen = [];
-    const fn = debounce((...args) => seen.push(args), 5);
-    fn(1, 'two', { three: true });
-    await delay(20);
-    assert.deepEqual(seen, [[1, 'two', { three: true }]]);
-  });
-});
+import { memoryStorage } from './helpers/index.js';
 
 describe('createStorage', () => {
   it('round-trips JSON values', () => {
@@ -95,5 +49,14 @@ describe('createStorage', () => {
     const storage = createStorage('t3', { backend });
     assert.equal(storage.set('key', 1), false);
     assert.equal(storage.get('key', 0), 1);
+  });
+
+  it('keeps namespaces apart', () => {
+    const base = memoryStorage();
+    const other = createStorage('other', { memoryOnly: true });
+    base.set('k', 'a');
+    other.set('k', 'b');
+    assert.equal(base.get('k', ''), 'a');
+    assert.equal(other.get('k', ''), 'b');
   });
 });

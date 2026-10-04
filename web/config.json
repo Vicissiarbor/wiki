@@ -1,31 +1,16 @@
 {
-  "version": 1,
   "site": {
     "title": "概念词条库",
-    "subtitle": "输入概念名称，或按首字母浏览"
+    "tagline": "输入名称查询，或直接翻阅下面的索引。",
+    "footer": "纯静态站点：内容保存在 data/entries.json，通过提交仓库更新。",
+    "updatedLabel": "更新于"
   },
   "data": {
     "url": "./data/entries.json",
-    "cacheBust": false
+    "timeoutMs": 15000
   },
-  "source": "json",
-  "allowLocalEditing": true,
   "search": {
-    "mode": "contains",
     "budgetMs": 400,
-    "maxResults": 1000,
-    "pageSize": 200
-  },
-  "rest": {
-    "baseUrl": "",
-    "token": "",
-    "timeoutMs": 10000
-  },
-  "github": {
-    "owner": "",
-    "repo": "",
-    "branch": "main",
-    "path": "web/data/entries.json",
-    "token": ""
+    "maxResults": 1000
   }
 }

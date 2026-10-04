@@ -3,97 +3,90 @@ import { describe, it } from 'node:test';
 
 import {
   DEFAULT_CONFIG,
-  SETTINGS_KEY,
+  isRelativePath,
   loadConfig,
   mergeConfig,
   normalizeConfig,
-  readOverrides,
-  writeOverrides,
 } from '../web/js/config.js';
-import { createFetchStub, memoryStorage } from './helpers/index.js';
+import { createFetchStub } from './helpers/index.js';
 
 describe('mergeConfig', () => {
-  it('merges nested objects and replaces arrays', () => {
-    const merged = mergeConfig(
-      { a: 1, nested: { x: 1, y: 2 }, list: [1, 2] },
-      { nested: { y: 3 }, list: [9], extra: true },
-    );
-    assert.deepEqual(merged, { a: 1, nested: { x: 1, y: 3 }, list: [9], extra: true });
+  it('merges nested objects and replaces other values', () => {
+    assert.deepEqual(mergeConfig({ a: 1, nest: { x: 1, y: 2 } }, { nest: { y: 3 }, b: true }), {
+      a: 1,
+      nest: { x: 1, y: 3 },
+      b: true,
+    });
   });
 
-  it('ignores non-object patches and undefined values', () => {
+  it('ignores non-objects and undefined values', () => {
     assert.deepEqual(mergeConfig({ a: 1 }, null), { a: 1 });
     assert.deepEqual(mergeConfig({ a: 1 }, { a: undefined }), { a: 1 });
   });
 });
 
 describe('normalizeConfig', () => {
-  it('falls back for unknown sources and empty values', () => {
-    const config = normalizeConfig({ source: 'ftp', data: { url: '  ' }, github: { branch: '' } });
-    assert.equal(config.source, 'json');
+  it('falls back for empty values', () => {
+    const config = normalizeConfig({ site: { title: '  ' }, data: { url: '' } });
+    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
     assert.equal(config.data.url, DEFAULT_CONFIG.data.url);
-    assert.equal(config.github.branch, 'main');
-    assert.equal(config.search.budgetMs, DEFAULT_CONFIG.search.budgetMs);
+    assert.equal(config.search.maxResults, DEFAULT_CONFIG.search.maxResults);
   });
 
-  it('strips trailing slashes from the REST base URL', () => {
-    assert.equal(normalizeConfig({ rest: { baseUrl: 'http://host:8787///' } }).rest.baseUrl, 'http://host:8787');
+  it('accepts a full configuration', () => {
+    const config = normalizeConfig({
+      site: { title: '我的词典', tagline: 't', footer: 'f', updatedLabel: '更新' },
+      data: { url: './data/other.json', timeoutMs: 1000 },
+      search: { budgetMs: 100, maxResults: 10 },
+    });
+    assert.equal(config.site.title, '我的词典');
+    assert.equal(config.data.url, './data/other.json');
+    assert.equal(config.search.budgetMs, 100);
   });
 });
 
-describe('overrides', () => {
-  it('round-trips through storage', () => {
-    const storage = memoryStorage();
-    assert.deepEqual(readOverrides(storage), {});
-    writeOverrides(storage, { source: 'local', github: { owner: 'me' } });
-    writeOverrides(storage, { github: { repo: 'repo' } });
-    const overrides = readOverrides(storage);
-    assert.equal(overrides.source, 'local');
-    assert.deepEqual(overrides.github, { owner: 'me', repo: 'repo' });
-    assert.ok(storage.get(SETTINGS_KEY, null));
-  });
-
-  it('ignores corrupted storage', () => {
-    const storage = memoryStorage();
-    storage.set(SETTINGS_KEY, 'not-an-object');
-    assert.deepEqual(readOverrides(storage), {});
+describe('isRelativePath', () => {
+  it('accepts relative paths and rejects everything anchored', () => {
+    for (const value of ['./data/entries.json', 'data/entries.json', '../x.json', '']) {
+      assert.equal(isRelativePath(value), true, value);
+    }
+    for (const value of ['/data/entries.json', '//host/x.json', 'https://example.com/x.json', 'http://x']) {
+      assert.equal(isRelativePath(value), false, value);
+    }
   });
 });
 
 describe('loadConfig', () => {
-  it('uses defaults when config.json is absent', async () => {
+  it('uses built-in defaults when config.json is absent', async () => {
     const { fetch } = createFetchStub({});
-    const result = await loadConfig({ storage: memoryStorage(), fetchImpl: fetch });
-    assert.equal(result.loadedFromConfigFile, false);
-    assert.equal(result.config.source, 'json');
-    assert.deepEqual(result.warnings, []);
+    const { config, warnings } = await loadConfig({ fetchImpl: fetch });
+    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
+    assert.equal(config.data.url, './data/entries.json');
+    assert.deepEqual(warnings, []);
   });
 
-  it('merges config.json, then per-device overrides', async () => {
-    const storage = memoryStorage();
-    writeOverrides(storage, { source: 'local' });
+  it('merges config.json over the defaults', async () => {
     const { fetch } = createFetchStub({
-      '*': { body: { site: { title: '我的词条库' }, data: { url: './data/other.json' } } },
+      '*': { body: { site: { title: '词典' }, data: { url: 'data/other.json' } } },
     });
-    const result = await loadConfig({ storage, fetchImpl: fetch, configUrl: './config.json' });
-    assert.equal(result.loadedFromConfigFile, true);
-    assert.equal(result.config.site.title, '我的词条库');
-    assert.equal(result.config.data.url, './data/other.json');
-    assert.equal(result.config.source, 'local');
+    const { config } = await loadConfig({ fetchImpl: fetch, configUrl: './config.json' });
+    assert.equal(config.site.title, '词典');
+    assert.equal(config.data.url, 'data/other.json');
   });
 
-  it('warns when config.json holds a token', async () => {
+  it('refuses an absolute data URL, because the site must stay portable', async () => {
     const { fetch } = createFetchStub({
-      '*': { body: { rest: { baseUrl: 'http://host', token: 'secret' } } },
+      '*': { body: { data: { url: 'https://example.com/entries.json' } } },
     });
-    const result = await loadConfig({ storage: memoryStorage(), fetchImpl: fetch });
-    assert.match(result.warnings[0], /令牌/);
+    const { config, warnings } = await loadConfig({ fetchImpl: fetch });
+    assert.equal(config.data.url, DEFAULT_CONFIG.data.url);
+    assert.match(warnings[0], /相对路径/);
   });
 
-  it('survives a failing config.json', async () => {
+  it('warns about a broken config.json but keeps working', async () => {
     const { fetch } = createFetchStub({ '*': { status: 500, body: {} } });
-    const result = await loadConfig({ storage: memoryStorage(), fetchImpl: fetch });
-    assert.equal(result.config.source, 'json');
-    assert.match(result.warnings[0], /500/);
+    const { config, warnings } = await loadConfig({ fetchImpl: fetch });
+    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
+    assert.match(warnings[0], /500/);
   });
 });

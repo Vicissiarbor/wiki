@@ -7,7 +7,7 @@
  */
 
 /**
- * @param {string} tag Tag name, optionally with a class shorthand ("div.card").
+ * @param {string} tag Tag name, optionally with an id and classes ("input#q.search__input").
  * @param {object} [props] Attributes, plus the special keys below.
  * @param {Array<Node|string|null|undefined|false>} [children]
  * @returns {HTMLElement}
@@ -21,8 +21,14 @@
  *   style              -> { property: value }
  */
 export function el(tag, props = {}, children = []) {
-  const [name, ...classes] = String(tag).split('.');
+  const [nameAndId, ...classes] = String(tag).split('.');
+  const hash = nameAndId.indexOf('#');
+  const name = hash === -1 ? nameAndId : nameAndId.slice(0, hash);
+  const id = hash === -1 ? '' : nameAndId.slice(hash + 1);
   const node = document.createElement(name || 'div');
+  if (id !== '') {
+    node.id = id;
+  }
   if (classes.length > 0) {
     node.className = classes.join(' ');
   }
@@ -68,10 +74,10 @@ export function el(tag, props = {}, children = []) {
 
 /**
  * @param {Node} parent
- * @param {Array<Node|string|null|undefined|false>} children
+ * @param {Node|string|null|undefined|false|Array<Node|string|null|undefined|false>} children
  * @returns {Node} `parent`
  */
-export function append(parent, children) {
+function append(parent, children) {
   const list = Array.isArray(children) ? children.flat(4) : [children];
   for (const child of list) {
     if (child === null || child === undefined || child === false || child === '') {
@@ -89,25 +95,6 @@ export function append(parent, children) {
  */
 export function qs(selector, root = document) {
   return /** @type {HTMLElement|null} */ (root.querySelector(selector));
-}
-
-/**
- * @param {string} selector
- * @param {ParentNode} [root]
- * @returns {HTMLElement[]}
- */
-export function qsa(selector, root = document) {
-  return /** @type {HTMLElement[]} */ ([...root.querySelectorAll(selector)]);
-}
-
-/**
- * @param {Node} node
- * @returns {void} Removes every child.
- */
-export function clear(node) {
-  while (node.firstChild) {
-    node.removeChild(node.firstChild);
-  }
 }
 
 /**
@@ -145,14 +132,3 @@ export function highlight(value, ranges) {
   return fragment(parts);
 }
 
-/**
- * @param {HTMLElement|null} node
- * @param {boolean} hidden
- * @returns {void}
- */
-export function setHidden(node, hidden) {
-  if (!node) {
-    return;
-  }
-  node.hidden = hidden;
-}

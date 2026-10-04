@@ -6,66 +6,42 @@
     <title>概念词条库</title>
     <meta
       name="description"
-      content="输入概念名称即可查询词条，支持精确匹配与正则表达式，并按首字母排序浏览。"
+      content="按名称查询的概念词条库：支持包含、精确与正则匹配，并提供按首字母排序的索引。"
     />
-    <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./assets/css/main.css" />
+    <link rel="stylesheet" href="./assets/style.css" />
   </head>
   <body>
-    <a class="skip-link" href="#list-host">跳到词条列表</a>
+    <a class="skip" href="#view">跳到内容</a>
 
-    <header class="site-header">
-      <div class="site-header__titles">
-        <h1 id="site-title">概念词条库</h1>
-        <p id="site-subtitle">输入概念名称，或按首字母浏览</p>
-      </div>
-      <div id="toolbar-host" class="site-header__toolbar"></div>
-      <div id="site-stats" class="stats" aria-live="polite"></div>
+    <header class="masthead">
+      <h1 id="site-title">概念词条库</h1>
+      <p id="site-tagline" class="tagline"></p>
+      <div id="search-host"></div>
+      <div id="status-host"></div>
     </header>
 
-    <div id="app-banner" class="banner" role="alert" hidden></div>
+    <hr />
 
-    <div id="search-host" class="search-host"></div>
-    <div id="initials-host" class="initials-host"></div>
-
-    <main class="layout">
-      <section class="layout__list" aria-label="词条列表">
-        <div id="list-host">
-          <p class="loading">正在加载词条…</p>
-        </div>
-      </section>
-      <section class="layout__detail" aria-label="词条内容">
-        <div id="detail-host"></div>
-      </section>
+    <main id="view">
+      <p class="loading">正在读取词条…</p>
     </main>
 
-    <footer class="site-footer">
-      <p>
-        <span>SearchLADR · 纯静态站点</span>
-        <span aria-hidden="true">·</span>
-        <a href="./data/entries.json">查看数据文件</a>
-        <span aria-hidden="true">·</span>
-        <span>词条正文使用 Markdown 子集（标题 / 列表 / 表格 / 代码 / [[词条]]）</span>
-      </p>
-      <p class="site-footer__hint">
-        快捷键：<kbd>/</kbd> 或 <kbd>Ctrl</kbd>+<kbd>K</kbd> 聚焦搜索框，<kbd>n</kbd> 新增词条，<kbd>Esc</kbd> 关闭弹窗。
-      </p>
-    </footer>
+    <hr />
 
-    <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+    <footer id="site-footer" class="colophon"></footer>
 
     <noscript>
-      <div class="noscript">
-        <p>本页需要启用 JavaScript 才能查询词条。你仍然可以直接查看
-          <a href="./data/entries.json">data/entries.json</a>。</p>
-      </div>
+      <p class="noscript">
+        索引与词条需要 JavaScript 才能显示。数据本身在
+        <a href="./data/entries.json">data/entries.json</a>，可以直接下载查看。
+      </p>
     </noscript>
 
     <!--
-      Deployment note: this page must be served over HTTP(S) (GitHub Pages does
-      that for you). Opening the file directly with file:// will fail because
-      browsers refuse to load ES modules from file URLs.
+      This page must be served over HTTP(S) (GitHub Pages does that for you);
+      browsers refuse to load ES modules from file:// URLs.
+      Local preview: node tools/serve.js
     -->
     <script type="module" src="./js/boot.js"></script>
   </body>

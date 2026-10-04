@@ -1,6 +1,7 @@
 /**
- * Guards the shipped data files: the sample glossary must stay loadable, and
- * config.json must stay a valid, token-free configuration.
+ * Guards the shipped data and the page shell: the glossary must stay loadable,
+ * the configuration must stay portable, and index.html must keep providing the
+ * elements the app expects.
  */
 
 import assert from 'node:assert/strict';
@@ -12,6 +13,7 @@ import { describe, it } from 'node:test';
 import { EntryCollection } from '../web/js/core/collection.js';
 import { initialOfEntry } from '../web/js/core/initials.js';
 import { groupEntriesByInitial } from '../web/js/core/sort.js';
+import { renderMarkdown } from '../web/js/core/markdown.js';
 import { searchEntries } from '../web/js/core/search.js';
 import { normalizeConfig } from '../web/js/config.js';
 
@@ -25,24 +27,29 @@ async function readJson(relative) {
   return JSON.parse(await fs.readFile(path.join(REPO_ROOT, relative), 'utf8'));
 }
 
+/** @returns {Promise<EntryCollection>} */
+async function loadSample() {
+  const { collection, issues } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
+  assert.deepEqual(issues, []);
+  return collection;
+}
+
 describe('web/data/entries.json', () => {
   it('parses without a single skipped entry', async () => {
-    const raw = await readJson('web/data/entries.json');
-    const { collection, issues } = EntryCollection.fromDocument(raw);
-    assert.deepEqual(issues, []);
+    const collection = await loadSample();
     assert.ok(collection.size >= 5, 'the sample glossary should be non-trivial');
   });
 
-  it('gives every entry a resolvable initial letter and a stable id', async () => {
-    const { collection } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
+  it('gives every entry a URL-safe id and a resolvable initial letter', async () => {
+    const collection = await loadSample();
     for (const entry of collection.entries) {
-      assert.match(entry.id, /^[A-Za-z0-9][A-Za-z0-9._~-]*$/);
-      assert.match(initialOfEntry(entry), /^[A-Z#]$/);
+      assert.match(entry.id, /^[A-Za-z0-9][A-Za-z0-9._~-]*$/, entry.id);
+      assert.match(initialOfEntry(entry), /^[A-Z#]$/, entry.name);
     }
   });
 
   it('groups into buckets that match the expected sample letters', async () => {
-    const { collection } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
+    const collection = await loadSample();
     const letters = groupEntriesByInitial(collection.entries).map((group) => group.letter);
     for (const letter of ['C', 'S', 'Z', '#']) {
       assert.ok(letters.includes(letter), `expected a bucket for ${letter}`);
@@ -50,49 +57,47 @@ describe('web/data/entries.json', () => {
   });
 
   it('is searchable in every documented mode', async () => {
-    const { collection } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
-    const queries = ['熵', '=熵', '/^熵/', 'tag:物理', 'content:/H\\(X\\)/', '正则'];
-    for (const query of queries) {
+    const collection = await loadSample();
+    for (const query of ['熵', '=熵', '/^熵/', 'tag:物理', 'content:/H\\(X\\)/', '正则']) {
       const outcome = searchEntries(collection.entries, query);
       assert.equal(outcome.error, '', `query ${query} failed: ${outcome.error}`);
       assert.ok(outcome.results.length > 0, `query ${query} found nothing`);
     }
   });
 
-  it('renders wiki links that resolve inside the sample data', async () => {
-    const { collection } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
-    const { renderMarkdown } = await import('../web/js/core/markdown.js');
-    const linked = collection.entries.filter((entry) => entry.content.includes('[['));
-    assert.ok(linked.length > 0, 'the sample data should demonstrate [[wiki links]]');
-
-    let resolvedCount = 0;
-    for (const entry of linked) {
+  it('keeps wiki links resolvable and bodies free of executable markup', async () => {
+    const collection = await loadSample();
+    let resolved = 0;
+    for (const entry of collection.entries) {
       const html = renderMarkdown(entry.content, {
-        resolveTermLink: (name) => (collection.byName(name) ? '#/?e=ok' : null),
+        resolveTermLink: (name) =>
+          collection.byName(name) ? `#/e/${encodeURIComponent(name)}` : null,
       });
-      resolvedCount += (html.match(/class="term-link"/g) ?? []).length;
+      assert.ok(!html.includes('<script'), `${entry.id} produced a script tag`);
+      resolved += (html.match(/class="term-link"(?!--missing)/g) ?? []).length;
     }
-    assert.ok(resolvedCount > 0, 'at least one wiki link should point at an existing entry');
+    assert.ok(resolved > 0, 'at least one [[wiki link]] should point at an existing entry');
   });
 
-  it('keeps every entry body renderable without throwing', async () => {
-    const { collection } = EntryCollection.fromDocument(await readJson('web/data/entries.json'));
-    const { renderMarkdown } = await import('../web/js/core/markdown.js');
-    for (const entry of collection.entries) {
-      const html = renderMarkdown(entry.content, { resolveTermLink: () => null });
-      assert.ok(!html.includes('<script'), `${entry.id} produced a script tag`);
-    }
+  it('has unique ids (a duplicate would break the index links)', async () => {
+    const collection = await loadSample();
+    assert.equal(new Set(collection.ids()).size, collection.size);
   });
 });
 
 describe('web/config.json', () => {
-  it('is valid and contains no secrets', async () => {
-    const raw = await readJson('web/config.json');
-    const config = normalizeConfig(raw);
-    assert.equal(config.source, 'json');
-    assert.equal(config.rest.token, '');
-    assert.equal(config.github.token, '');
-    assert.match(config.data.url, /entries\.json$/);
+  it('is valid, portable and free of secrets', async () => {
+    const config = normalizeConfig(await readJson('web/config.json'));
+    assert.equal(config.data.url.startsWith('./'), true);
+    assert.equal(typeof config.site.title, 'string');
+    assert.ok(!JSON.stringify(config).includes('token'));
+    assert.ok(!JSON.stringify(config).includes('http'));
+  });
+
+  it('points at a file that exists', async () => {
+    const config = normalizeConfig(await readJson('web/config.json'));
+    const target = path.join(REPO_ROOT, 'web', config.data.url.replace(/^\.\//, ''));
+    assert.ok((await fs.stat(target)).isFile(), `${target} is missing`);
   });
 });
 
@@ -101,24 +106,30 @@ describe('web/index.html', () => {
     const html = await fs.readFile(path.join(REPO_ROOT, 'web', 'index.html'), 'utf8');
     for (const selector of [
       'id="site-title"',
-      'id="site-subtitle"',
-      'id="site-stats"',
-      'id="app-banner"',
+      'id="site-tagline"',
       'id="search-host"',
-      'id="initials-host"',
-      'id="list-host"',
-      'id="detail-host"',
-      'id="toolbar-host"',
-      'id="toasts"',
+      'id="status-host"',
+      'id="view"',
+      'id="site-footer"',
     ]) {
       assert.ok(html.includes(selector), `index.html is missing ${selector}`);
     }
-    assert.match(html, /<script type="module" src="\.\/js\/boot\.js">/);
-    assert.ok(!/<script(?![^>]*type="module")[^>]*>[\s\S]*?<\/script>/.test(html), 'no inline scripts');
   });
 
-  it('ships a .nojekyll file so Pages does not process the site', async () => {
-    const stat = await fs.stat(path.join(REPO_ROOT, 'web', '.nojekyll'));
-    assert.ok(stat.isFile());
+  it('loads exactly one module and no inline script', async () => {
+    const html = await fs.readFile(path.join(REPO_ROOT, 'web', 'index.html'), 'utf8');
+    assert.match(html, /<script type="module" src="\.\/js\/boot\.js"><\/script>/);
+    assert.equal((html.match(/<script/g) ?? []).length, 1);
+  });
+
+  it('ships a .nojekyll file so Pages serves the directory as-is', async () => {
+    assert.ok((await fs.stat(path.join(REPO_ROOT, 'web', '.nojekyll'))).isFile());
+  });
+
+  it('has no leftover reference to the removed stylesheet', async () => {
+    for (const page of ['web/index.html', 'web/404.html']) {
+      const html = await fs.readFile(path.join(REPO_ROOT, page), 'utf8');
+      assert.ok(!html.includes('main.css'), `${page} still points at main.css`);
+    }
   });
 });

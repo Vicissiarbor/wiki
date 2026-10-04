@@ -1,13 +1,12 @@
 /**
- * Whole-app integration test: the real index.html, the real modules, a real
- * (jsdom) DOM, and a stubbed network. This is the closest thing to "open the
- * page in a browser" that runs in CI.
+ * Whole-site integration test: the real index.html, the real modules, a real
+ * (jsdom) DOM and a stubbed network. The closest thing to "open the page".
  */
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
 import { JSDOM } from 'jsdom';
@@ -17,7 +16,7 @@ import { memoryStorage, response } from './helpers/index.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Entries used by most tests: two Chinese names, aliases, tags and one XSS attempt. */
+/** Fixtures: two Chinese names (pinyin buckets H/S), an ASCII name, an XSS attempt. */
 const ENTRIES = {
   version: 1,
   updatedAt: '2025-01-01T00:00:00.000Z',
@@ -28,7 +27,9 @@ const ENTRIES = {
       aliases: ['entropy', '信息熵'],
       tags: ['物理'],
       summary: '度量不确定性',
-      content: '## 定义\n\nH(X) = -Σ p log p\n\n见 [[焓]] 与 [[不存在的词条]]\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
+      content:
+        '## 定义\n\nH(X) = -Σ p log p\n\n见 [[焓]] 与 [[不存在的词条]]\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
+      updatedAt: '2025-01-02T00:00:00.000Z',
     },
     {
       id: 'enthalpy',
@@ -43,7 +44,8 @@ const ENTRIES = {
       name: '注入测试',
       tags: ['安全'],
       summary: '不应执行任何脚本',
-      content: '<img src=x onerror="window.__XSS__ = true">\n\n<script>window.__XSS__ = true</script>\n\n[危险](javascript:alert(1))',
+      content:
+        '<img src=x onerror="window.__XSS__ = true">\n\n<script>window.__XSS__ = true</script>\n\n[危险](javascript:alert(1))',
     },
     {
       id: 'binary-search',
@@ -57,12 +59,12 @@ const ENTRIES = {
 
 /**
  * @param {{entries?: object, url?: string, failEntries?: boolean, config?: object}} [options]
- * @returns {Promise<{dom: JSDOM, app: object, repository: object}>}
+ * @returns {Promise<{dom: JSDOM, app: object, store: object}>}
  */
-async function startApp(options = {}) {
+async function startSite(options = {}) {
   const html = await fs.readFile(path.join(REPO_ROOT, 'web', 'index.html'), 'utf8');
   const dom = new JSDOM(html, {
-    url: options.url ?? 'https://example.test/',
+    url: options.url ?? 'https://example.test/ladr/',
     pretendToBeVisual: true,
   });
   installDomGlobals(dom);
@@ -96,7 +98,7 @@ async function startApp(options = {}) {
  * @returns {void}
  */
 function installDomGlobals(dom) {
-  const names = [
+  for (const name of [
     'window',
     'document',
     'navigator',
@@ -109,9 +111,7 @@ function installDomGlobals(dom) {
     'Event',
     'KeyboardEvent',
     'MouseEvent',
-    'customElements',
-  ];
-  for (const name of names) {
+  ]) {
     Object.defineProperty(globalThis, name, {
       value: dom.window[name],
       configurable: true,
@@ -120,425 +120,343 @@ function installDomGlobals(dom) {
   }
 }
 
+/** @type {any} */
+let DomEvent = globalThis.Event;
+
 /**
  * @param {HTMLElement} node
  * @param {string} type
  * @returns {void}
  */
 function fire(node, type) {
-  node.dispatchEvent(new dom4Event(type, { bubbles: true, cancelable: true }));
+  node.dispatchEvent(new DomEvent(type, { bubbles: true, cancelable: true }));
 }
 
-/** Event constructor of the current jsdom window. */
-let dom4Event = /** @type {any} */ (globalThis.Event);
+/** @type {Awaited<ReturnType<typeof startSite>>} */
+let site;
+/** @type {Document} */
+let doc;
+/** @type {HTMLInputElement} */
+let input;
 
-describe('UI - rendering', () => {
-  /** @type {Awaited<ReturnType<typeof startApp>>} */
-  let app;
-  /** @type {Document} */
-  let doc;
+/**
+ * Follow a hash link the way a browser does: change the hash, then notify.
+ * (jsdom does not implement fragment navigation on clicks.)
+ *
+ * @param {HTMLElement} node
+ * @returns {void}
+ */
+function followLink(node) {
+  const href = node.getAttribute('href') ?? '';
+  assert.ok(href.startsWith('#'), `not a hash link: ${href}`);
+  site.dom.window.location.hash = href;
+  site.dom.window.dispatchEvent(new site.dom.window.Event('hashchange'));
+}
 
+/**
+ * @param {string} value
+ * @returns {void}
+ */
+function search(value) {
+  input.value = value;
+  fire(input, 'input');
+}
+
+/**
+ * @returns {string[]} The names currently listed, in page order.
+ */
+function listed() {
+  return [...doc.querySelectorAll('a.term')].map((node) => node.textContent);
+}
+
+describe('index page', () => {
   before(async () => {
-    // jsdom is created inside startApp; capture the event constructor it exposes.
-    app = await startApp();
-    doc = app.dom.window.document;
+    site = await startSite();
+    doc = site.dom.window.document;
+    DomEvent = site.dom.window.Event;
+    input = /** @type {any} */ (doc.querySelector('#q'));
   });
 
   after(() => {
-    app.app.destroy();
+    site.app.destroy();
   });
 
-  it('loads entries and renders the A-Z grouped list', () => {
-    const items = doc.querySelectorAll('.entry-item');
-    assert.equal(items.length, 4);
-    const letters = [...doc.querySelectorAll('.entries__letter-text')].map((node) => node.textContent);
-    assert.deepEqual(letters, ['B', 'H', 'S', 'Z']); // Binary Search / 焓 hán / 熵 shāng / 注入测试 zhù
+  it('renders letter headings and one link per entry', () => {
+    assert.deepEqual(
+      [...doc.querySelectorAll('h2.letter')].map((node) => node.textContent),
+      ['B', 'H', 'S', 'Z'], // Binary Search / 焓 hán / 熵 shāng / 注入测试 zhù
+    );
+    assert.deepEqual(listed(), ['Binary Search', '焓', '熵', '注入测试']);
   });
 
-  it('shows the total in the stats line', () => {
-    assert.match(doc.querySelector('#site-stats').textContent, /共 4 条词条/);
+  it('links every entry with a hash route', () => {
+    const hrefs = [...doc.querySelectorAll('a.term')].map((node) => node.getAttribute('href'));
+    assert.deepEqual(hrefs, ['#/e/binary-search', '#/e/enthalpy', '#/e/entropy', '#/e/xss']);
+    for (const href of hrefs) {
+      assert.ok(href.startsWith('#/e/'), href);
+      assert.ok(!href.includes('//'), href);
+    }
   });
 
-  it('renders the search box and the initials navigation', () => {
-    assert.ok(doc.querySelector('#search-input'));
-    assert.equal(doc.querySelectorAll('.initials__letter').length, 28);
-    assert.ok(!doc.querySelector('.entry-item.is-active'));
+  it('provides the search box, a submit button and a hint line', () => {
+    assert.ok(input);
+    assert.equal(doc.querySelector('.search__label').textContent, '查询');
+    assert.equal(doc.querySelector('.search__submit').textContent, '查找');
+    assert.match(doc.querySelector('.search__hint').textContent, /浏览全部词条/);
   });
 
-  it('shows the placeholder when nothing is selected', () => {
-    assert.match(doc.querySelector('.detail').textContent, /选择一个词条/);
+  it('shows the totals in the footer', () => {
+    assert.match(doc.querySelector('#site-footer').textContent, /共 4 条/);
+    assert.match(doc.querySelector('#site-footer').textContent, /更新于 2025-01-01/);
+  });
+
+  it('sets the document title from the config', () => {
+    assert.equal(doc.title, '概念词条库');
   });
 });
 
-describe('UI - searching', () => {
-  /** @type {Awaited<ReturnType<typeof startApp>>} */
-  let app;
-  /** @type {Document} */
-  let doc;
-  /** @type {HTMLInputElement} */
-  let input;
-
+describe('searching', () => {
   before(async () => {
-    app = await startApp();
-    doc = app.dom.window.document;
-    dom4Event = app.dom.window.Event;
-    input = /** @type {any} */ (doc.querySelector('#search-input'));
+    site = await startSite();
+    doc = site.dom.window.document;
+    DomEvent = site.dom.window.Event;
+    input = /** @type {any} */ (doc.querySelector('#q'));
   });
 
   after(() => {
-    app.app.destroy();
+    site.app.destroy();
   });
 
-  /**
-   * @param {string} value
-   * @returns {void}
-   */
-  function type(value) {
-    input.value = value;
-    fire(input, 'input');
-  }
-
-  /**
-   * @returns {string[]} Names currently listed.
-   */
-  function listed() {
-    return [...doc.querySelectorAll('.entry-item__name')].map((node) => node.textContent);
-  }
-
-  it('filters on contains search', () => {
-    type('物理');
-    // tag match: both physics entries, ordered by the name collator (hán < shāng)
+  it('filters on a contains match, without letter headings', () => {
+    search('物理');
     assert.deepEqual(listed(), ['焓', '熵']);
+    assert.equal(doc.querySelectorAll('h2.letter').length, 0);
+    assert.match(doc.querySelector('p.count').textContent, /命中 2 条/);
   });
 
-  it('highlights the matched part of the name', () => {
-    type('熵');
-    assert.equal(doc.querySelectorAll('.entry-item__name mark').length, 1);
-    assert.equal(doc.querySelector('.entry-item__name mark').textContent, '熵');
+  it('highlights what matched', () => {
+    search('焓');
+    const marks = [...doc.querySelectorAll('a.term mark')].map((node) => node.textContent);
+    assert.ok(marks.includes('焓'));
+    assert.equal(doc.querySelectorAll('h2.letter').length, 0);
   });
 
-  it('switches to exact mode', () => {
-    type('熵');
-    assert.deepEqual(listed(), ['熵', '焓'].filter((name) => name === '熵'));
-    const mode = /** @type {HTMLSelectElement} */ (doc.querySelector('.search__mode'));
-    mode.value = 'exact';
-    fire(mode, 'change');
-    assert.deepEqual(listed(), ['熵']);
-    type('ent');
-    assert.deepEqual(listed(), []);
-    type('entropy'); // exact match against the alias
-    assert.deepEqual(listed(), ['熵']);
-    mode.value = 'contains';
-    fire(mode, 'change');
-  });
-
-  it('supports the "=" prefix for exact search', () => {
-    type('=焓');
+  it('supports the "=" prefix for an exact match', () => {
+    search('=焓');
     assert.deepEqual(listed(), ['焓']);
+    search('=焓x');
+    assert.equal(listed().length, 0);
+  });
+
+  it('matches aliases in exact mode', () => {
+    search('=entropy');
+    assert.deepEqual(listed(), ['熵']);
   });
 
   it('supports regular expressions', () => {
-    type('/^焓|^熵$/');
+    search('/^焓|^熵$/');
     assert.deepEqual(listed(), ['焓', '熵']);
-
-    // Aliases are matched by a regex too.
-    type('/^enthal/');
+    search('/^enthal/');
     assert.deepEqual(listed(), ['焓']);
   });
 
   it('reports an invalid regular expression', () => {
-    type('/[/');
+    search('/[/');
     assert.equal(listed().length, 0);
     assert.match(doc.querySelector('.search__hint').textContent, /正则表达式无效/);
   });
 
-  it('refuses a catastrophic regular expression', () => {
-    type('/(a+)+b/');
+  it('refuses a catastrophic regular expression instead of freezing', () => {
+    search('/(a+)+b/');
     assert.equal(listed().length, 0);
     assert.match(doc.querySelector('.search__hint').textContent, /灾难性回溯/);
   });
 
   it('scopes a query to a field', () => {
-    type('tag:算法');
+    search('tag:算法');
     assert.deepEqual(listed(), ['Binary Search']);
-    type('content:log p');
+    search('content:log p');
     assert.deepEqual(listed(), ['熵']);
   });
 
-  it('reports that nothing matched', () => {
-    type('zzzz');
+  it('explains an empty result set', () => {
+    search('zzzz');
     assert.equal(listed().length, 0);
-    assert.match(doc.querySelector('.entries-empty').textContent, /没有匹配/);
+    assert.match(doc.querySelector('.empty__title').textContent, /没有匹配/);
   });
 
-  it('clears the query back to browse mode', () => {
-    type('');
+  it('returns to the index when the query is cleared', () => {
+    search('');
     assert.equal(listed().length, 4);
-    assert.match(doc.querySelector('.search__hint').textContent, /浏览全部词条/);
+    assert.equal(doc.querySelectorAll('h2.letter').length, 4);
   });
 
-  it('shows the query in the URL for sharing', () => {
-    type('焓');
-    assert.match(app.dom.window.location.hash, /q=%E7%84%93/);
-    type('');
+  it('puts the query in the URL so a search can be shared', () => {
+    search('焓');
+    assert.match(site.dom.window.location.hash, /^#\/\?q=/);
+    search('');
   });
 
-  it('filters by initial letter from the navigation bar', () => {
-    const letter = /** @type {HTMLButtonElement} */ (
-      [...doc.querySelectorAll('.initials__letter')].find((node) => node.textContent === 'B')
-    );
-    letter.click();
-    assert.deepEqual(listed(), ['Binary Search']);
-    letter.click(); // toggles back to all
+  it('opens the first result when the form is submitted', () => {
+    search('=enthalpy');
+    fire(doc.querySelector('form.search'), 'submit');
+    assert.match(site.dom.window.location.hash, /#\/e\/enthalpy$/);
+    assert.equal(doc.querySelector('.entry-title').textContent, '焓');
+  });
+
+  it('clears the query with the 清空 button', () => {
+    search('焓');
+    const clearButton = /** @type {HTMLElement} */ (doc.querySelector('.search__clear'));
+    assert.equal(clearButton.hidden, false);
+    clearButton.click();
+    assert.equal(input.value, '');
     assert.equal(listed().length, 4);
+    assert.equal(clearButton.hidden, true);
   });
 });
 
-describe('UI - detail view', () => {
-  /** @type {Awaited<ReturnType<typeof startApp>>} */
-  let app;
-  /** @type {Document} */
-  let doc;
-
+describe('entry pages', () => {
   before(async () => {
-    app = await startApp();
-    doc = app.dom.window.Event ? app.dom.window.document : app.dom.window.document;
-    dom4Event = app.dom.window.Event;
+    site = await startSite();
+    doc = site.dom.window.document;
+    DomEvent = site.dom.window.Event;
+    input = /** @type {any} */ (doc.querySelector('#q'));
   });
 
   after(() => {
-    app.app.destroy();
+    site.app.destroy();
   });
 
   /**
    * @param {string} id
    * @returns {void}
    */
-  function select(id) {
-    const button = /** @type {HTMLElement} */ (
-      doc.querySelector(`.entry-item__button[data-id="${id}"]`)
-    );
-    button.click();
+  function openFromIndex(id) {
+    const link = /** @type {HTMLElement} */ (doc.querySelector(`a.term[data-id="${id}"]`));
+    assert.ok(link, `no index link for ${id}`);
+    followLink(link);
   }
 
-  it('renders the entry title, aliases, tags and body', () => {
-    select('entropy');
-    assert.equal(doc.querySelector('.detail__title').textContent, '熵');
-    assert.match(doc.querySelector('.detail__aliases').textContent, /entropy/);
-    assert.equal(doc.querySelector('.detail__tags .chip').textContent, '物理');
-    const content = doc.querySelector('.detail__content');
-    assert.match(content.innerHTML, /<h3>定义<\/h3>/);
-    assert.match(content.innerHTML, /<table>/);
+  it('navigates from the index to an entry page', () => {
+    openFromIndex('entropy');
+    assert.equal(doc.querySelector('.entry-title').textContent, '熵');
+    assert.match(doc.querySelector('.meta-line').textContent, /别名：/);
+    assert.match(doc.querySelector('.summary').textContent, /度量不确定性/);
+    assert.ok(doc.querySelector('.crumbs a').getAttribute('href') === '#/');
+    assert.match(doc.querySelector('.crumbs').textContent, /更新于 2025-01-02/);
   });
 
-  it('resolves wiki links to existing entries and marks missing ones', () => {
-    select('entropy');
-    const link = doc.querySelector('.detail__content a.term-link');
-    assert.equal(link.getAttribute('href'), '#/?e=enthalpy');
-    assert.equal(doc.querySelector('.detail__content .term-link--missing').textContent, '不存在的词条');
+  it('renders the Markdown body, including tables', () => {
+    const prose = doc.querySelector('.prose');
+    assert.match(prose.innerHTML, /<h3>定义<\/h3>/);
+    assert.match(prose.innerHTML, /<table>/);
+  });
+
+  it('resolves wiki links and marks unknown ones', () => {
+    assert.equal(doc.querySelector('.prose a.term-link').getAttribute('href'), '#/e/enthalpy');
+    assert.equal(doc.querySelector('.prose .term-link--missing').textContent, '不存在的词条');
+  });
+
+  it('offers previous/next navigation in dictionary order', () => {
+    // Dictionary order is B(inary Search) → H(焓) → S(熵) → Z(注入测试),
+    // so 熵's neighbours are 焓 and 注入测试.
+    const pager = doc.querySelector('.pager');
+    assert.match(pager.textContent, /← 焓/);
+    assert.match(pager.textContent, /注入测试 →/);
+  });
+
+  it('returns to the index with the back link', () => {
+    followLink(/** @type {HTMLElement} */ (doc.querySelector('.crumbs a')));
+    assert.equal(doc.querySelectorAll('a.term').length, 4);
+    assert.match(site.dom.window.location.hash, /^#\/$/);
+  });
+
+  it('jumps to another entry by clicking its wiki link', () => {
+    openFromIndex('entropy');
+    followLink(/** @type {HTMLElement} */ (doc.querySelector('.prose a.term-link')));
+    assert.equal(doc.querySelector('.entry-title').textContent, '焓');
+  });
+
+  it('shows a helpful page for a link that no longer resolves', () => {
+    site.app.openEntry('deleted-entry');
+    assert.match(doc.querySelector('.entry-title').textContent, /没有这个词条/);
+    assert.match(doc.querySelector('#view').textContent, /deleted-entry/);
+  });
+
+  it('navigates into a tag and an alias from the entry page', () => {
+    site.app.openEntry('entropy');
+    const tagLink = /** @type {HTMLElement} */ (
+      [...doc.querySelectorAll('.meta-line a')].find((node) => node.textContent === '物理')
+    );
+    followLink(tagLink);
+    assert.equal(listed().length, 2);
+    assert.match(site.dom.window.location.hash, /tag%3A/);
   });
 
   it('never executes or injects raw HTML from an entry', () => {
-    app.dom.window.__XSS__ = false;
-    select('xss');
-    const content = doc.querySelector('.detail__content');
-    assert.equal(content.querySelector('script'), null);
-    assert.equal(content.querySelector('img'), null);
-    assert.equal(app.dom.window.__XSS__, false);
-    // An unsafe URL is not linked; it stays visible as inert text.
-    assert.equal(content.querySelector('a[href^="javascript"]'), null);
-    assert.match(content.textContent, /危险/);
-  });
-
-  it('records the selected entry in the URL', () => {
-    select('enthalpy');
-    assert.match(app.dom.window.location.hash, /e=enthalpy/);
-  });
-
-  it('copies a shareable link', async () => {
-    select('enthalpy');
-    const copyButton = /** @type {HTMLElement} */ (
-      [...doc.querySelectorAll('.detail__actions .button')].find((node) =>
-        node.textContent.includes('复制链接'),
-      )
-    );
-    copyButton.click();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.ok(doc.querySelector('#toasts').textContent.length > 0);
-  });
-
-  it('hides the edit actions on a read-only source', () => {
-    select('entropy');
-    const labels = [...doc.querySelectorAll('.detail__actions .button')].map((node) => node.textContent);
-    assert.deepEqual(labels, ['复制链接']);
-    assert.match(doc.querySelector('.toolbar__hint').textContent, /只读数据源/);
+    site.dom.window.__XSS__ = false;
+    site.app.openEntry('xss');
+    const view = doc.querySelector('#view');
+    assert.equal(view.querySelector('script'), null);
+    assert.equal(view.querySelector('img'), null);
+    assert.equal(site.dom.window.__XSS__, false);
+    assert.equal(view.querySelector('a[href^="javascript"]'), null);
+    assert.match(view.textContent, /危险/);
   });
 });
 
-describe('UI - editing', () => {
-  /** @type {Awaited<ReturnType<typeof startApp>>} */
-  let app;
-  /** @type {Document} */
-  let doc;
-
-  before(async () => {
-    app = await startApp();
-    doc = app.dom.window.document;
-    dom4Event = app.dom.window.Event;
-    // Local editing needs no server: switch the source and reload.
-    await app.repository.setConfig({ source: 'local' });
-    app.app.render();
-  });
-
-  after(() => {
-    app.app.destroy();
-  });
-
-  it('enables the editing UI on a writable source', () => {
-    const labels = [...doc.querySelectorAll('.toolbar .button')].map((node) => node.textContent);
-    assert.ok(labels.includes('新增词条'));
-    assert.equal(doc.querySelector('.toolbar__hint').hidden, true);
-  });
-
-  it('creates an entry from the editor', async () => {
-    app.app.openCreate();
-    const modal = doc.querySelector('.modal');
-    assert.ok(modal, 'editor modal should be open');
-
-    const name = /** @type {HTMLInputElement} */ (doc.querySelector('#f-name'));
-    name.value = 'Beta 测试';
-    const tags = /** @type {HTMLInputElement} */ (doc.querySelector('#f-tags'));
-    tags.value = '测试, 演示';
-    fire(doc.querySelector('form.editor'), 'input');
-
-    const save = /** @type {HTMLElement} */ (
-      [...doc.querySelectorAll('.modal__footer .button')].find((node) => node.textContent === '保存')
-    );
-    assert.equal(/** @type {HTMLButtonElement} */ (save).disabled, false);
-    const before = app.repository.collection.size;
-    save.click();
-    await new Promise((resolve) => setTimeout(resolve, 40));
-
-    // Local editing starts from a copy of the bundled file, so it grows by one.
-    assert.equal(app.repository.collection.size, before + 1);
-    assert.equal(app.repository.collection.byName('Beta 测试').tags.length, 2);
-    assert.equal(doc.querySelector('.modal'), null);
-    assert.match(doc.querySelector('#toasts').textContent, /已新增/);
-  });
-
-  it('blocks saving an entry whose name duplicates another one', async () => {
-    app.app.openCreate();
-    const name = /** @type {HTMLInputElement} */ (doc.querySelector('#f-name'));
-    name.value = 'Beta 测试';
-    fire(doc.querySelector('form.editor'), 'input');
-    const save = /** @type {HTMLButtonElement} */ (
-      [...doc.querySelectorAll('.modal__footer .button')].find(
-        (node) => node.textContent === '保存',
-      )
-    );
-    assert.equal(save.disabled, true);
-    assert.match(doc.querySelector('.editor__issues').textContent, /已存在/);
-  });
-
-  it('previews markdown without executing it', () => {
-    const content = /** @type {HTMLTextAreaElement} */ (doc.querySelector('#f-content'));
-    content.value = '**bold** <script>window.__XSS2__ = true</script>';
-    fire(doc.querySelector('form.editor'), 'input');
-    const previewTab = /** @type {HTMLElement} */ (
-      [...doc.querySelectorAll('.editor__tabs .tab')].find((node) => node.textContent === '预览')
-    );
-    previewTab.click();
-    const preview = doc.querySelector('.editor__preview');
-    assert.match(preview.innerHTML, /<strong>bold<\/strong>/);
-    assert.ok(!preview.innerHTML.includes('<script>'));
-  });
-
-  it('deletes an entry after confirmation', async () => {
-    const before = app.repository.collection.size;
-    app.app.openEntry(app.repository.collection.entries[0].id);
-    const remove = /** @type {HTMLElement} */ (
-      [...doc.querySelectorAll('.detail__actions .button')].find((node) => node.textContent === '删除')
-    );
-    remove.click();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    const confirm = /** @type {HTMLElement} */ (
-      [...doc.querySelectorAll('.modal__footer .button')].find((node) => node.textContent === '删除')
-    );
-    confirm.click();
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    assert.equal(app.repository.collection.size, before - 1);
-  });
-});
-
-describe('UI - settings dialog', () => {
-  it('offers all four data sources by default', async () => {
-    const app = await startApp();
-    const doc = app.dom.window.document;
-    const tools = [...doc.querySelectorAll('.toolbar .button')].find((node) => node.textContent === '设置');
-    /** @type {HTMLElement} */ (tools).click();
-    const labels = [...doc.querySelectorAll('.settings__source-label')].map((node) => node.textContent);
-    assert.deepEqual(labels, ['静态 JSON（只读）', '本地编辑（仅此设备）', 'GitHub 仓库（可写）', '自建后端（可写）']);
-    assert.equal(doc.querySelector('.modal').textContent.includes('数据源设置'), true);
-    app.app.destroy();
-  });
-
-  it('hides local editing when config.json disallows it', async () => {
-    const app = await startApp({ config: { allowLocalEditing: false } });
-    const doc = app.dom.window.document;
-    const button = [...doc.querySelectorAll('.toolbar .button')].find((node) => node.textContent === '设置');
-    /** @type {HTMLElement} */ (button).click();
-    const labels = [...doc.querySelectorAll('.settings__source-label')].map((node) => node.textContent);
-    assert.ok(!labels.includes('本地编辑（仅此设备）'));
-    assert.equal(labels.length, 3);
-    app.app.destroy();
-  });
-});
-
-describe('UI - deep links and failures', () => {
-  it('restores a shared query from the URL hash', async () => {
-    const app = await startApp({ url: 'https://example.test/#/?q=%E7%84%93&mode=contains' });
-    const doc = app.dom.window.document;
-    assert.equal(/** @type {HTMLInputElement} */ (doc.querySelector('#search-input')).value, '焓');
-    // "焓" also appears inside other entries' bodies, so full-text search finds them too.
+describe('deep links', () => {
+  it('restores a shared search from the hash', async () => {
+    const local = await startSite({ url: 'https://example.test/ladr/#/?q=%E7%86%B5' });
+    const localDoc = local.dom.window.document;
+    assert.equal(/** @type {HTMLInputElement} */ (localDoc.querySelector('#q')).value, '熵');
     assert.deepEqual(
-      [...doc.querySelectorAll('.entry-item__name')].map((node) => node.textContent),
-      ['焓', '熵', 'Binary Search'],
+      [...localDoc.querySelectorAll('a.term')].map((node) => node.textContent),
+      ['熵'],
     );
-    app.app.destroy();
+    local.app.destroy();
   });
 
-  it('opens an entry directly from the URL', async () => {
-    const app = await startApp({ url: 'https://example.test/#/?e=enthalpy' });
-    const doc = app.dom.window.document;
-    assert.equal(doc.querySelector('.detail__title').textContent, '焓');
-    app.app.destroy();
+  it('opens an entry directly from the hash', async () => {
+    const local = await startSite({ url: 'https://example.test/ladr/#/e/enthalpy' });
+    assert.equal(local.dom.window.document.querySelector('.entry-title').textContent, '焓');
+    local.app.destroy();
   });
 
-  it('shows a banner with a hint when the data source is unreachable', async () => {
-    const app = await startApp({ failEntries: true });
-    const doc = app.dom.window.document;
-    const banner = doc.querySelector('#app-banner');
-    assert.equal(banner.hidden, false);
-    assert.match(banner.textContent, /无法连接数据源|CORS/);
-    assert.match(doc.querySelector('#list-host').textContent, /暂无词条/);
-    app.app.destroy();
+  it('ignores an unknown hash and shows the index', async () => {
+    const local = await startSite({ url: 'https://example.test/ladr/#/nonsense' });
+    assert.equal(local.dom.window.document.querySelectorAll('a.term').length, 4);
+    local.app.destroy();
   });
 });
 
-describe('UI - keyboard shortcuts', () => {
-  it('focuses the search box on "/" and opens the editor on "n"', async () => {
-    const app = await startApp();
-    const doc = app.dom.window.document;
-    dom4Event = app.dom.window.Event;
+describe('failures and shortcuts', () => {
+  it('explains a missing data file', async () => {
+    const local = await startSite({ failEntries: true });
+    const localDoc = local.dom.window.document;
+    assert.match(localDoc.querySelector('.status').textContent, /无法读取/);
+    assert.equal(localDoc.querySelector('#view').querySelectorAll('a.term').length, 0);
+    local.app.destroy();
+  });
 
-    doc.body.dispatchEvent(
-      new app.dom.window.KeyboardEvent('keydown', { key: '/', bubbles: true }),
-    );
-    assert.equal(doc.activeElement, doc.querySelector('#search-input'));
+  it('shows a warning when config.json points at an absolute URL', async () => {
+    const local = await startSite({ config: { data: { url: 'https://example.com/entries.json' } } });
+    assert.match(local.dom.window.document.querySelector('.status').textContent, /相对路径/);
+    local.app.destroy();
+  });
 
-    await app.repository.setConfig({ source: 'local' });
-    doc.body.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'n', bubbles: true }));
-    assert.ok(doc.querySelector('.modal'), 'editor should open on "n"');
-    app.app.destroy();
+  it('focuses the search box with "/" and returns to the index with Escape', async () => {
+    const local = await startSite();
+    const localDoc = local.dom.window.document;
+    DomEvent = local.dom.window.Event;
+
+    localDoc.body.dispatchEvent(new local.dom.window.KeyboardEvent('keydown', { key: '/', bubbles: true }));
+    assert.equal(localDoc.activeElement, localDoc.querySelector('#q'));
+
+    local.app.openEntry('entropy');
+    assert.equal(localDoc.querySelector('.entry-title').textContent, '熵');
+    localDoc.body.dispatchEvent(new local.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(localDoc.querySelectorAll('a.term').length, 4);
+    local.app.destroy();
   });
 });
