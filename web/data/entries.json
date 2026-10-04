@@ -3,14 +3,14 @@
 	"updatedAt": "2025-01-01T00:00:00.000Z",
 	"entries": [
 		{
-			"id": "cap-theorem",
-			"name": "CAP 定理",
-			"aliases": ["CAP theorem", "布鲁尔定理"],
-			"tags": ["分布式系统", "架构"],
-			"summary": "一致性、可用性、分区容错性三者不可同时满足。",
-			"content": "## 一句话\n\n在网络分区（P）必然发生的前提下，一致性（C）与可用性（A）只能二选一。\n\n## 三个字母的含义\n\n- **C** Consistency：所有节点读到同一份最新数据\n- **A** Availability：每个请求都能在有限时间内得到非错误响应\n- **P** Partition tolerance：网络分区时系统仍能继续工作\n\n## 常见取舍\n\n| 选择 | 代表系统 |\n| --- | --- |\n| CP | ZooKeeper、etcd |\n| AP | Cassandra、DynamoDB |\n\n## 注意\n\n「三选二」是简化说法：真正要决定的是**分区发生时**放弃 C 还是放弃 A。\n\n延伸：[[最终一致性]]、[[幂等性]]",
-			"createdAt": "2024-11-02T09:00:00.000Z",
-			"updatedAt": "2024-12-18T10:20:00.000Z"
+			"id": "complexNumber",
+			"name": "Complex Number",
+			"aliases": [],
+			"tags": ["Math","Linear Algebra"],
+			"summary": "definition of comliex number.",
+			"content": "- A *complex number* is an order pair $(a, b)$, where $a,b \\in R$, but we will write this as $a + bi$.",
+			"createdAt": "2026-10-04T11:28:00.000Z",
+			"updatedAt": "2026-10-04T11:28:00.000Z"
 		}
 	]
 }
