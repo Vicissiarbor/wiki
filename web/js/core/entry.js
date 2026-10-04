@@ -385,13 +385,3 @@ export function applyEntryPatch(existing, patch, options = {}) {
   };
   return assertValidEntry(entry, { siblings: [] });
 }
-
-/**
- * Value used for the searchable text of an entry: name plus aliases.
- *
- * @param {Entry} entry
- * @returns {string}
- */
-export function displayName(entry) {
-  return entry.name;
-}

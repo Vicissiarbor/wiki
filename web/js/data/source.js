@@ -89,15 +89,3 @@ export function assertWritable(source) {
     );
   }
 }
-
-/**
- * Shape of the JSON body used by the REST API and honoured by every source.
- *
- * @param {EntryCollection} collection
- * @param {{updatedAt?: string, revision?: string}} [meta]
- * @returns {{version: number, updatedAt: string, revision?: string, entries: Entry[]}}
- */
-export function documentOf(collection, meta = {}) {
-  const document = collection.toDocument({ updatedAt: meta.updatedAt });
-  return meta.revision === undefined ? document : { ...document, revision: meta.revision };
-}

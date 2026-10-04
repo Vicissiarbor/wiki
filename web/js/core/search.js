@@ -561,14 +561,3 @@ export function splitByMatches(value, ranges) {
   }
   return parts;
 }
-
-/**
- * Resolve a field scope in relation to a search mode; used by the UI to warn
- * that e.g. regex does not search the body by default.
- *
- * @param {ParsedQuery} parsed
- * @returns {string[]} Field names that were searched for this query.
- */
-export function searchedFields(parsed) {
-  return fieldsForQuery(parsed);
-}

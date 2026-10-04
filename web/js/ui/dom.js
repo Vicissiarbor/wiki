@@ -146,21 +146,6 @@ export function highlight(value, ranges) {
 }
 
 /**
- * Add or remove a class.
- *
- * @param {HTMLElement|null} node
- * @param {string} className
- * @param {boolean} enabled
- * @returns {void}
- */
-export function toggleClass(node, className, enabled) {
-  if (!node) {
-    return;
-  }
-  node.classList.toggle(className, enabled);
-}
-
-/**
  * @param {HTMLElement|null} node
  * @param {boolean} hidden
  * @returns {void}
@@ -170,17 +155,4 @@ export function setHidden(node, hidden) {
     return;
   }
   node.hidden = hidden;
-}
-
-/**
- * Escape text for use inside an attribute selector or id.
- *
- * @param {string} value
- * @returns {string}
- */
-export function cssEscape(value) {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, (character) => `\\${character}`);
 }

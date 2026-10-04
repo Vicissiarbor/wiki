@@ -12,21 +12,6 @@ import { createModal } from './modal.js';
 import { toastError, toastSuccess } from './toast.js';
 
 /**
- * @param {string} filename
- * @param {string} text
- * @returns {void}
- */
-export function downloadText(filename, text) {
-  const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = el('a', { href: url, download: filename, style: { display: 'none' } });
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/**
  * @param {{config: import('../config.js').AppConfig,
  *   getStatus: () => {origin: string, revision: string, fetchedAt: string, writable: boolean, error: string, errorKind: string, issues: Array<{message: string}>},
  *   onApply: (patch: object) => Promise<void>,
