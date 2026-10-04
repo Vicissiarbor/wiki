@@ -10,12 +10,17 @@
   "entries": [
     {
       "id": "entropy",
-      "name": "熵",
-      "aliases": ["entropy", "信息熵"],
+      "name": "Entropy",
+      "nameZh": "熵",
+      "aliases": ["entropy"],
+      "aliasesZh": ["信息熵"],
       "initial": "S",
-      "tags": ["物理", "信息论"],
-      "summary": "度量系统的不确定性或无秩序程度。",
-      "content": "## 信息论定义\n\nH(X) = -Σ p(x) log₂ p(x)……",
+      "tags": ["Physics", "Information theory"],
+      "tagsZh": ["物理", "信息论"],
+      "summary": "How much uncertainty a system has.",
+      "summaryZh": "度量系统的不确定性或无秩序程度。",
+      "content": "## Information theory\n\nH(X) = -Σ p(x) log₂ p(x) …",
+      "contentZh": "## 信息论定义\n\nH(X) = -Σ p(x) log₂ p(x)……",
       "createdAt": "2024-11-02T08:00:00.000Z",
       "updatedAt": "2024-12-20T15:10:00.000Z"
     }
@@ -36,12 +41,18 @@
 | 字段 | 必填 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | `id` | ✅ | string | 稳定标识，决定分享链接 `#/e/entropy`。只允许字母、数字、`.`、`_`、`~`、`-`，必须以字母或数字开头，最长 128。**改名不要改 id**，否则旧链接失效 |
-| `name` | ✅ | string | 词条名，**全集合内唯一**（忽略大小写）。最长 200 |
-| `aliases` | ❌ | string[] | 别名，参与搜索与精确匹配。最多 50 个，每个最长 200 |
+| `name` | ✅ | string | **英文**词条名（基准语言，永不缺失），**全集合内唯一**（忽略大小写）。最长 200 |
+| `nameZh` | ❌ | string | 中文词条名；留空则显示英文名。最长 200 |
+| `aliases` | ❌ | string[] | 英文别名，参与搜索与精确匹配。最多 50 个，每个最长 200 |
+| `aliasesZh` | ❌ | string[] | 中文别名，同样参与搜索 |
 | `initial` | ❌ | string | 覆盖首字母分桶，取值 `A`–`Z` 或 `#`；留空自动判断（中文取拼音首字母） |
-| `tags` | ❌ | string[] | 标签，可用 `tag:标签` 精确筛选。最多 50 个，每个最长 64 |
-| `summary` | ❌ | string | 一句话简介，显示在词条页标题下方，也参与搜索。最长 500 |
-| `content` | ❌ | string | 正文，Markdown 子集（见下）。最长 200000 |
+| `initialZh` | ❌ | string | 中文界面下用的首字母覆盖值 |
+| `tags` | ❌ | string[] | 英文标签，可用 `tag:标签` 精确筛选。最多 50 个，每个最长 64 |
+| `tagsZh` | ❌ | string[] | 中文标签 |
+| `summary` | ❌ | string | 英文一句话简介，显示在词条页标题下方，也参与搜索。最长 500 |
+| `summaryZh` | ❌ | string | 中文简介 |
+| `content` | ❌ | string | 英文正文，Markdown 子集（见下）。最长 200000 |
+| `contentZh` | ❌ | string | 中文正文（同样支持 Markdown 与公式） |
 | `createdAt` | ❌ | string | 时间，可留空 |
 | `updatedAt` | ❌ | string | 时间，显示为词条页的「更新于」 |
 
@@ -51,6 +62,17 @@
 这类会被 `npm test` 判为不合法。
 
 未知字段会被忽略；空字符串与空数组会被跳过，所以文件可以保持干净。
+
+### 双语约定
+
+| 规则 | 说明 |
+| --- | --- |
+| 英文是基准 | `name`/`aliases`/`tags`/`summary`/`content` 是英文，**必须**有 `name`；中文全部可选 |
+| 回退按字段 | 缺哪个中文字段就用英文的那一个。可以只翻正文（中文界面显示"英文标题 + 中文正文"），也可以只翻名字 |
+| 两种语言都能搜到 | 搜索同时匹配中英字段：英文界面下用"复数"也能查到 `Complex Number`，反之亦然 |
+| `[[词条]]` 两种名字都能解析 | `[[Entropy]]` 与 `[[熵]]` 指向同一条 |
+| 首字母与排序随界面语言 | 中文界面按中文名的拼音首字母分组（熵 → S），英文界面按英文名 |
+| 默认语言 | `web/config.json` 的 `site.defaultLocale`（当前为 `en`）；访问者在页头切换后按设备记住 |
 
 ## 校验规则
 
@@ -82,7 +104,7 @@ npm test        # tests/data-files.test.js 会校验整份文件
 | `---` | 分隔线 |
 | `` `代码` ``、`**粗体**`、`*斜体*`、`~~删除线~~` | 行内样式 |
 | `[文字](https://…)`、`![图](https://…)` | 链接与图片（仅允许 `http`/`https`/`mailto`/相对地址） |
-| `[[熵]]`、`[[熵\|熵与信息]]` | 跳转到另一个词条；目标不存在时显示为灰色文字 |
+| `[[熵]]`、`[[Entropy]]`、`[[熵\|熵与信息]]` | 跳转到另一个词条（中英文名、别名都可）；目标不存在时显示为灰色文字 |
 | 裸 URL | 自动成为链接 |
 | `$…$`、`\(…\)` | 行内数学公式（KaTeX） |
 | `$$…$$`、`\[…\]` | 独立成行的公式（KaTeX display 模式） |

@@ -9,8 +9,9 @@
 | 只能用 GitHub Pages，不要服务器 | 纯静态：无后端、无写接口、无令牌；`web/` 目录即产物 |
 | 内容靠 git 维护 | 唯一数据源 `web/data/entries.json`，改完提交即发布（见 [editing.md](editing.md)） |
 | 支持 KaTeX 公式 | 正文里的 `$…$` / `$$…$$` 由内置的 KaTeX 渲染（见下文「数学公式」） |
+| 首页与词条中英双语 | 界面文案一份中英对照表；词条英文为基准、中文按字段可选（见下文「双语」） |
 | 全部使用相对路径 | 所有引用都是 `./…`；`tests/architecture.test.js` 有专门的守卫测试 |
-| 可维护 | 纯函数核心 + 视图分离 + 212 个测试 + 架构守卫 |
+| 可维护 | 纯函数核心 + 视图分离 + 248 个测试 + 架构守卫 |
 
 ## 分层
 
@@ -91,7 +92,36 @@ KaTeX 是 271 KB 的第三方库（加字体共约 600 KB）。处理方式：
   `output: 'htmlAndMathml'`（保留 MathML，屏幕阅读器与复制粘贴都正常）。
 - KaTeX 是仓库内的第三方文件，升级方式与保留清单写在 `web/assets/katex/NOTICE.md`。
 
-### 7. 时间戳与"最新更新"
+### 7. 双语：英文是基准，中文按字段覆盖
+
+需求是"英文永不缺失、中文可缺、缺中文显示英文、默认英文、切换后所有页面一起变"。
+落地方式：
+
+- **数据形状**：英文放在原有字段里（`name`/`content`/…），中文放在紧跟其后的
+  `…Zh` 兄弟字段（`nameZh`/`aliasesZh`/`tagsZh`/`summaryZh`/`contentZh`/`initialZh`）。
+  没有采用 `{ "en": {...}, "zh": {...} }` 的嵌套结构：那样会作废现有数据，
+  而扁平结构把"英文是基准、中文是附加"这条不变量直接写进了字段布局。
+- **回退粒度是字段而不是词条**：只翻译了正文、名字仍是英文的词条，就显示
+  "英文标题 + 中文正文"。这比整条回退更贴近实际写作习惯（很多术语的名字本来就
+  用英文），也正好对应需求里的"缺少中文则显示英文"。
+- **双语的三种职责分开**：
+  1. `core/locale.js`（纯）——语言代码、配置文案的多语言解析、`localizeEntry()`
+     按字段取显示值，并给出另一语言的名字（`alternateName`）用于副标题；
+  2. `core/i18n.js`（纯）——唯一的界面文案表（中英各一份）与 `createTranslator()`，
+     核心（搜索错误提示）与界面共用，所以两边不会各写一套；
+  3. 视图只负责把 `t()` 的结果放进 DOM，不认识语言。
+- **搜索同时覆盖两种语言**：`search.js` 的 `valuesOf()` 把中英字段合在一起匹配，
+  所以在英文界面下搜"复数"照样能找到 `Complex Number`；界面语言只影响显示。
+- **索引随语言重算**：先 `localizeEntry()` 再分组排序，首字母因此来自"显示用的名字"
+  （中文模式 熵 → S），排序用 `Intl.Collator`（中文按拼音，英文按英文规则）。
+- **切换是全局的**：语言存在 localStorage（`ladr.locale`），优先级为
+  已保存的值 > `config.json` 的 `site.defaultLocale` > `en`；切换后 `render()`
+  重画页头、搜索框、索引、词条页、页脚、状态行，并同步 `<html lang>` 与文档标题。
+  语言**不进 URL**：分享链接在对方设备上按对方的选择打开更合理。
+- **`[[词条]]` 双语言都能解析**：`EntryCollection.byName()` 索引了中英名称与两组别名，
+  所以中文正文里写 `[[熵]]` 在英文界面下也能跳转。
+
+### 8. 时间戳与"最新更新"
 
 - 词条时间只需精确到**日**（`2026-10-04`），也接受完整 ISO-8601；
   `ui/entry-view.js` 对"只到日"的值直接原样输出——若走 `Date` 解析，
@@ -101,7 +131,7 @@ KaTeX 是 271 KB 的第三方库（加字体共约 600 KB）。处理方式：
   `updatedAt`/`createdAt` 里取最大值；两者都是 `YYYY-MM-DD` 或 ISO，
   字符串比较即可正确排序。文档级 `updatedAt` 变成可选、仅作历史兼容。
 
-### 8. 复古风格怎么实现
+### 9. 复古风格怎么实现
 
 - 单色 + 衬线字体（Georgia / 宋体），经典下划线链接，分隔线用 `<hr>` 和 `border-bottom`；
 - 保留 `visited` 链接颜色（现代框架常抹掉它，但那是"目录页"的关键手感）；
@@ -137,9 +167,12 @@ KaTeX 是 271 KB 的第三方库（加字体共约 600 KB）。处理方式：
 | `web/js/core/initials.js` + `pinyin-table.js` | 首字母（中文按拼音） |
 | `web/js/core/sort.js` | A–Z 分桶与排序（`Intl.Collator`，中文按拼音） |
 | `web/js/core/markdown.js` | 安全的最小 Markdown 渲染器 + 公式抽取（纯函数） |
+| `web/js/core/locale.js` | 语言代码、配置文案多语言解析、按字段回退的词条本地化 |
+| `web/js/core/i18n.js` | 中英文案表 + `createTranslator()`（含单复数变体） |
 | `web/js/ui/index-view.js` | 索引页渲染（字母 + 链接 + `<mark>`） |
 | `web/js/ui/entry-view.js` | 词条页渲染（含 `[[词条]]` 解析与上下条） |
-| `web/js/ui/search-box.js` | 输入框 + 查找按钮 + 提示行（无模式下拉） |
+| `web/js/ui/search-box.js` | 输入框 + 查找按钮 + 提示行（无模式下拉，标签随语言切换） |
+| `web/js/ui/language-switch.js` | 页头的 English · 中文 切换 |
 | `web/js/ui/router.js` | `#/` 与 `#/e/<id>` 的解析、写回、分享链接 |
 | `web/js/ui/status.js` | 加载 / 警告 / 错误的一行反馈 |
 | `web/js/ui/math.js` | 按需加载内置 KaTeX 并渲染 `[data-tex]`，失败则保留原文 |
@@ -156,15 +189,16 @@ KaTeX 是 271 KB 的第三方库（加字体共约 600 KB）。处理方式：
 | 升级 KaTeX / 换数学库 | `web/assets/katex/NOTICE.md` + `ui/math.js`（只依赖 `render(tex, node, options)`） |
 | 索引排成多列 | `web/assets/style.css` 里的 `.terms` |
 | 换首字母规则 | `core/initials.js`（表来自 `tools/gen_pinyin_table.py`） |
+| 增加第三种语言 | `core/locale.js` 的 `LOCALES`/`LOCALIZED_FIELDS` 与 `core/i18n.js` 的文案表；视图无需改动 |
 | 恢复网页编辑 | `git log --all -- web/js/data/` 找历史实现（会重新引入令牌与外部接口风险） |
 
 ## 测试策略
 
 | 层次 | 文件 | 关注点 |
 | --- | --- | --- |
-| 单元 | `entry` `collection` `initials` `search` `markdown` `math` `config` `util` | 规则与边界：重名、超长、正则、注入、转义、多音字、公式抽取、KaTeX 降级 |
+| 单元 | `entry` `collection` `initials` `search` `markdown` `math` `i18n` `config` `util` | 规则与边界：重名、超长、正则、注入、转义、多音字、公式抽取、KaTeX 降级、双语回退与文案完整性 |
 | 集成 | `entries-store` | 读取、缓存、先画后刷、坏数据跳过、404、非法 JSON、过期响应 |
-| 整页 | `ui`（jsdom，真实 `index.html`） | 字母分组与链接、三种搜索、高亮、词条页、`[[词条]]`、上下条、公式渲染接线、只到日的日期、深链、注入防护、快捷键 |
+| 整页 | `ui`（jsdom，真实 `index.html`） | 字母分组与链接、三种搜索、高亮、词条页、`[[词条]]`、上下条、公式渲染接线、只到日的日期、语言切换（含持久化与回退）、深链、注入防护、快捷键 |
 | 守卫 | `architecture` `data-files` | 核心纯度、相对路径、只读约束、数据文件（含时间戳与公式）、KaTeX 资源与页面外壳的有效性 |
 
 运行：`npm test`（Node 内置测试运行器，无需测试框架）。

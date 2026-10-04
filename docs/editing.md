@@ -20,13 +20,21 @@
 {
   "id": "abandon",
   "name": "abandon",
-  "aliases": ["放弃"],
-  "tags": ["英语"],
-  "summary": "放弃；抛弃。",
-  "content": "## 例句\n\n- abandon the plan\n- never abandon a friend",
+  "nameZh": "放弃",
+  "aliases": ["give up"],
+  "aliasesZh": ["抛弃"],
+  "tags": ["English"],
+  "tagsZh": ["英语"],
+  "summary": "To give up on something.",
+  "summaryZh": "放弃；抛弃。",
+  "content": "## Examples\n\n- abandon the plan\n- never abandon a friend",
+  "contentZh": "## 例句\n\n- abandon the plan\n- never abandon a friend",
   "updatedAt": "2026-10-04"
 }
 ```
+
+**只用英文也完全没问题**：中文那几个字段全都可省，界面会显示英文（见
+[data-format.md](data-format.md) 的"双语约定"）。
 
 规则（完整说明见 [data-format.md](data-format.md)）：
 
@@ -34,7 +42,8 @@
 - `name` 必填且唯一（忽略大小写），界面和索引显示的就是它；
 - 首字母不用自己写：中文按拼音自动判断（`熵 → S`），多音字可以用 `"initial": "C"` 覆盖；
 - **时间只需精确到日**：`"updatedAt": "2026-10-04"` 就行；页脚的"更新于"会自动取所有词条里最新的那个日期，不需要另外维护；
-- 正文可以用 Markdown 子集，外加 **KaTeX 公式**：行内写成 `$a + bi$`，独立公式写成 `$$…$$`（详见 [data-format.md](data-format.md)）。
+- 正文可以用 Markdown 子集，外加 **KaTeX 公式**：行内写成 `$a + bi$`，独立公式写成 `$$…$$`（详见 [data-format.md](data-format.md)）；
+- 中文是**可选叠加**：想翻哪个字段就加对应的 `…Zh` 字段（`nameZh`、`contentZh`…），没翻的字段自动用英文。
 
 ```bash
 npm test                                    # 校验 JSON、重名、字段长度
@@ -95,7 +104,14 @@ npm test
 
 `tests/data-files.test.js` 专门盯 `web/data/entries.json`，出错时会给出行号级别的提示。
 
-## 7. 为什么不做网页编辑
+## 7. 界面语言
+
+- 默认语言写在 `web/config.json` 的 `site.defaultLocale`（现在是 `"en"`）；想让中文成为默认值就把这里改成 `"zh"`；
+- 访问者在页头点 `English · 中文` 即可切换，**整个站点一起变**（首页、索引、词条页、页脚、搜索提示），
+  选择按设备保存在浏览器里，下次打开还是这门语言；
+- 切换只影响**显示**：中文正文里写 `[[熵]]`，在英文界面下同样能跳转，因为中英名字都是可解析的。
+
+## 8. 为什么不做网页编辑
 
 这是刻意的取舍：
 
