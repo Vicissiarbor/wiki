@@ -2,7 +2,7 @@
  * Error types shared by the browser frontend and the Node backend.
  *
  * The module is intentionally free of DOM and Node APIs so that both sides can
- * import it (see docs/architecture.md, "shared core").
+ * import it (see README.md, 目录结构).
  */
 
 /**

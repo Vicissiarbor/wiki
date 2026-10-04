@@ -3,7 +3,7 @@
  * a copy in localStorage so the index paints instantly on the next visit.
  *
  * The site is read-only by design: content is maintained by committing the JSON
- * file to the repository (see docs/editing.md). There is no write path, no
+ * file to the repository (see docs/data-format.md). There is no write path, no
  * token, and therefore nothing that can be abused from the outside.
  */
 
