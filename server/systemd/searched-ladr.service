@@ -1,0 +1,38 @@
+[Unit]
+Description=SearchLADR glossary backend
+Documentation=https://github.com/your-name/searchLADR
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ladr
+Group=ladr
+WorkingDirectory=/srv/searchLADR
+
+# Keep the secret out of the unit file: put LADR_TOKEN in this file instead,
+# readable only by root and the service user (chmod 600, chown ladr:ladr).
+EnvironmentFile=/etc/ladr.env
+
+ExecStart=/usr/bin/node /srv/searchLADR/server/index.js \
+  --host 0.0.0.0 \
+  --port 8787 \
+  --data /srv/searchLADR/web/data/entries.json \
+  --static-root /srv/searchLADR/web \
+  --cors-origin https://your-name.github.io
+
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/searchLADR
+
+# journalctl -u searched-ladr -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=searched-ladr
+
+[Install]
+WantedBy=multi-user.target
