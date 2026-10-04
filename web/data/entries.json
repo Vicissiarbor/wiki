@@ -8,8 +8,8 @@
 			"tags": ["Math","Linear Algebra"],
 			"summary": "definition of comliex number.",
 			"content": "- A *complex number* is an order pair $(a, b)$, where $a,b \\in R$, but we will write this as $a + bi$.",
-			"createdAt": "2026-10-04T11:28:00.000Z",
-			"updatedAt": "2026-10-04T11:28:00.000Z"
+			"createdAt": "2026-10-04",
+			"updatedAt": "2026-10-04"
 		}
 	]
 }
