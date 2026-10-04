@@ -12,9 +12,14 @@ import { MAX_QUERY_LENGTH } from '../core/search.js';
 import { el } from './dom.js';
 
 /**
- * @param {{onInput: (value: string) => void, onSubmit: () => void, onClear: () => void}} handlers
+ * All labels come from the translator, so switching the language only needs a
+ * call to `setLabels()`.
+ *
+ * @param {{onInput: (value: string) => void, onSubmit: () => void, onClear: () => void,
+ *   t?: (key: string, params?: Record<string, unknown>) => string}} handlers
  * @returns {{element: HTMLElement, input: HTMLInputElement, setValue: (value: string) => void,
- *   setHint: (text: string, tone?: string) => void, focus: () => void}}
+ *   setHint: (text: string, tone?: string) => void,
+ *   setLabels: (t: (key: string) => string) => void, focus: () => void}}
  */
 export function createSearchBox(handlers) {
   const input = /** @type {HTMLInputElement} */ (
@@ -69,9 +74,9 @@ export function createSearchBox(handlers) {
       },
     },
     [
-      el('label.search__label', { for: 'q', text: '查询' }),
+      el('label.search__label', { for: 'q' }),
       input,
-      el('button.search__submit', { type: 'submit', text: '查找' }),
+      el('button.search__submit', { type: 'submit' }),
       clearButton,
       hint,
     ],
@@ -91,6 +96,18 @@ export function createSearchBox(handlers) {
     setHint(text, tone = 'info') {
       hint.textContent = text;
       hint.className = `search__hint search__hint--${tone}`;
+    },
+    /**
+     * @param {(key: string) => string} t
+     */
+    setLabels(t) {
+      const label = /** @type {HTMLElement} */ (form.querySelector('.search__label'));
+      const submit = /** @type {HTMLButtonElement} */ (form.querySelector('.search__submit'));
+      label.textContent = t('search.label');
+      submit.textContent = t('search.submit');
+      clearButton.textContent = t('search.clear');
+      clearButton.title = t('search.clear');
+      input.placeholder = t('search.placeholder');
     },
     focus() {
       input.focus();

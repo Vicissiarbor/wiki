@@ -8,9 +8,16 @@
  * other subpath later, so nothing may assume it lives at the server root.
  */
 
+import { DEFAULT_LOCALE, normalizeLocale } from './core/locale.js';
+
 /**
+ * Site text may be written once (`"title": "Glossary"`) or per language
+ * (`"title": { "en": "Glossary", "zh": "词条库" }`); `localizedText()` resolves it.
+ *
+ * @typedef {string | Record<string, string>} LocalizedString
  * @typedef {object} AppConfig
- * @property {{title: string, tagline: string, updatedLabel: string}} site
+ * @property {{title: LocalizedString, tagline: LocalizedString,
+ *   updatedLabel: LocalizedString, defaultLocale: string}} site
  * @property {{url: string, timeoutMs: number}} data
  * @property {{budgetMs: number, maxResults: number}} search
  */
@@ -18,9 +25,13 @@
 /** @type {AppConfig} */
 export const DEFAULT_CONFIG = {
   site: {
-    title: '概念词条库',
-    tagline: '输入名称查询，或直接翻阅下面的索引。',
-    updatedLabel: '更新于',
+    defaultLocale: DEFAULT_LOCALE,
+    title: { en: 'Concept Glossary', zh: '概念词条库' },
+    tagline: {
+      en: 'Type a name to look it up, or browse the index below.',
+      zh: '输入名称查询，或直接翻阅下面的索引。',
+    },
+    updatedLabel: { en: 'Updated', zh: '更新于' },
   },
   data: {
     url: './data/entries.json',
@@ -72,10 +83,13 @@ export function mergeConfig(base, patch) {
  */
 export function normalizeConfig(raw) {
   const config = mergeConfig(structuredClone(DEFAULT_CONFIG), raw);
-  config.site.title = String(config.site.title ?? '').trim() || DEFAULT_CONFIG.site.title;
-  config.site.tagline = String(config.site.tagline ?? '').trim();
-  config.site.updatedLabel =
-    String(config.site.updatedLabel ?? '').trim() || DEFAULT_CONFIG.site.updatedLabel;
+  config.site.defaultLocale = normalizeLocale(config.site.defaultLocale);
+  if (config.site.title === '' || config.site.title === null) {
+    config.site.title = DEFAULT_CONFIG.site.title;
+  }
+  if (config.site.updatedLabel === '' || config.site.updatedLabel === null) {
+    config.site.updatedLabel = DEFAULT_CONFIG.site.updatedLabel;
+  }
   config.data.url = String(config.data.url ?? '').trim() || DEFAULT_CONFIG.data.url;
   config.data.timeoutMs = Number(config.data.timeoutMs) || DEFAULT_CONFIG.data.timeoutMs;
   config.search.budgetMs = Number(config.search.budgetMs) || DEFAULT_CONFIG.search.budgetMs;
@@ -101,12 +115,17 @@ export function isRelativePath(value) {
 /**
  * Load `./config.json` (optional) and merge it over the built-in defaults.
  *
+ * Warnings come back as keys plus parameters, not as sentences: the interface
+ * language is only known *after* the config is read, so the app translates them.
+ *
  * @param {{fetchImpl?: typeof fetch, configUrl?: string}} [options]
- * @returns {Promise<{config: AppConfig, warnings: string[]}>}
+ * @returns {Promise<{config: AppConfig,
+ *   warnings: Array<{key: string, params?: Record<string, unknown>}>}>}
  */
 export async function loadConfig(options = {}) {
   const fetchImpl = options.fetchImpl ?? (typeof fetch === 'function' ? fetch : null);
   const configUrl = options.configUrl ?? './config.json';
+  /** @type {Array<{key: string, params?: Record<string, unknown>}>} */
   const warnings = [];
   let config = normalizeConfig(globalThis.__LADR_CONFIG__ ?? {});
 
@@ -116,17 +135,15 @@ export async function loadConfig(options = {}) {
       if (response.ok) {
         config = normalizeConfig(mergeConfig(config, await response.json()));
       } else if (response.status !== 404) {
-        warnings.push(`config.json 读取失败（HTTP ${response.status}），使用内置默认配置。`);
+        warnings.push({ key: 'config.unreadable', params: { status: response.status } });
       }
     } catch {
-      warnings.push('未能读取 config.json，使用内置默认配置。');
+      warnings.push({ key: 'config.missing' });
     }
   }
 
   if (!isRelativePath(config.data.url)) {
-    warnings.push(
-      `config.json 里的 data.url 不是相对路径（${config.data.url}）：本站约定只用相对路径，已忽略。`,
-    );
+    warnings.push({ key: 'config.notRelative', params: { url: config.data.url } });
     config.data.url = DEFAULT_CONFIG.data.url;
   }
   return { config, warnings };

@@ -1,8 +1,18 @@
 {
   "site": {
-    "title": "概念词条库",
-    "tagline": "输入名称查询，或直接翻阅下面的索引。",
-    "updatedLabel": "更新于"
+    "defaultLocale": "en",
+    "title": {
+      "en": "Concept Glossary",
+      "zh": "概念词条库"
+    },
+    "tagline": {
+      "en": "Type a name to look it up, or browse the index below.",
+      "zh": "输入名称查询，或直接翻阅下面的索引。"
+    },
+    "updatedLabel": {
+      "en": "Updated",
+      "zh": "更新于"
+    }
   },
   "data": {
     "url": "./data/entries.json",

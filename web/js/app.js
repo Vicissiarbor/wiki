@@ -6,23 +6,37 @@
  * a dictionary pleasant to use.
  */
 
+import { createTranslator } from './core/i18n.js';
+import {
+  DEFAULT_LOCALE,
+  localizeEntries,
+  localizeEntry,
+  localizedText,
+  localeTag,
+  normalizeLocale,
+} from './core/locale.js';
 import { describeQuery, parseQuery, searchEntries } from './core/search.js';
-import { groupEntriesByInitial, sortEntries } from './core/sort.js';
+import { createNameCollator, groupEntriesByInitial, sortEntries } from './core/sort.js';
 import { loadConfig } from './config.js';
 import { createEntriesStore } from './data/entries-store.js';
 import { createStorage } from './util/storage.js';
 import { el, qs } from './ui/dom.js';
 import { renderEntry, renderMissingEntry } from './ui/entry-view.js';
 import { renderIndex } from './ui/index-view.js';
+import { createLanguageSwitch } from './ui/language-switch.js';
 import { renderMath } from './ui/math.js';
 import { INDEX_ROUTE, createRouter, parseHash } from './ui/router.js';
 import { createSearchBox } from './ui/search-box.js';
 import { createStatus } from './ui/status.js';
 
+/** localStorage key holding the chosen interface language. */
+const LOCALE_KEY = 'locale';
+
 /** Elements the HTML shell must provide (see web/index.html). */
 const SHELL = {
   title: '#site-title',
   tagline: '#site-tagline',
+  lang: '#lang-host',
   search: '#search-host',
   status: '#status-host',
   view: '#view',
@@ -46,17 +60,29 @@ export async function boot(options = {}) {
     configUrl: options.configUrl,
   });
 
+  /**
+   * The interface language: remembered per device, defaulting to config.json.
+   * Switching it re-renders every part of the page (header, search box, index,
+   * entry page, footer, status line) — see render().
+   */
+  const defaultLocale = normalizeLocale(config.site.defaultLocale, DEFAULT_LOCALE);
+  let locale = normalizeLocale(storage.get(LOCALE_KEY, defaultLocale), defaultLocale);
+  let t = createTranslator(locale);
+  // Chinese names sort by pinyin, English names by the English collator.
+  let collator = createLocaleCollator(locale);
+
   const store = createEntriesStore({
     url: config.data.url,
     storage,
     fetchImpl: options.fetchImpl,
     timeoutMs: config.data.timeoutMs,
+    t: (key, params) => t(key, params),
   });
 
   /** @type {Record<keyof typeof SHELL, HTMLElement>} */
   const shell = collectShell(root);
 
-  applyStaticText(root, config, shell);
+  applyLocale(shell, config, locale, root);
 
   /** @type {{route: import('./ui/router.js').Route}} */
   const state = { route: { ...INDEX_ROUTE } };
@@ -79,6 +105,12 @@ export async function boot(options = {}) {
   const status = createStatus();
   shell.status.appendChild(status.element);
 
+  const languageSwitch = createLanguageSwitch({
+    t: (key) => t(key),
+    onSelect: (next) => setLocale(next),
+  });
+  shell.lang.appendChild(languageSwitch.element);
+
   const router = createRouter({
     win,
     onChange: (route) => {
@@ -89,6 +121,23 @@ export async function boot(options = {}) {
   });
 
   // ------------------------------------------------------------- actions --
+
+  /**
+   * Switch the interface language; everything re-renders from the new strings.
+   *
+   * @param {string} next
+   */
+  function setLocale(next) {
+    const resolved = normalizeLocale(next, defaultLocale);
+    if (resolved === locale) {
+      return;
+    }
+    locale = resolved;
+    t = createTranslator(locale);
+    collator = createLocaleCollator(locale);
+    storage.set(LOCALE_KEY, locale);
+    render();
+  }
 
   /**
    * @param {string} value
@@ -134,6 +183,9 @@ export async function boot(options = {}) {
       renderIndexPage(collection);
     }
 
+    applyLocale(shell, config, locale);
+    searchBox.setLabels(t);
+    languageSwitch.update(locale);
     renderStatus(entriesState);
     renderFooter(collection, entriesState);
     router.sync(state.route);
@@ -143,25 +195,29 @@ export async function boot(options = {}) {
    * @param {object} collection
    */
   function renderEntryPage(collection) {
-    const entry = collection.byId(state.route.entryId);
-    if (!entry) {
-      shell.view.replaceChildren(renderMissingEntry(state.route.entryId));
-      searchBox.setHint('没有找到这个词条。按 Esc 或点“索引”返回列表。');
+    const source = collection.byId(state.route.entryId);
+    if (!source) {
+      shell.view.replaceChildren(renderMissingEntry(state.route.entryId, t));
+      searchBox.setHint(t('hint.missingEntry'));
       return;
     }
-    const ordered = sortEntries(collection.entries);
+    const entry = localizeEntry(source, locale);
+    const ordered = sortEntries(localizeEntries(collection.entries, locale), {
+      compare: collator.compare,
+    });
     const index = ordered.findIndex((item) => item.id === entry.id);
     shell.view.replaceChildren(
       renderEntry({
         entry,
         collection,
-        parsed: parseQuery(''),
+        parsed: parseQuery('', { t }),
         previous: index > 0 ? ordered[index - 1] : null,
         next: index >= 0 && index < ordered.length - 1 ? ordered[index + 1] : null,
-        updatedLabel: config.site.updatedLabel,
+        updatedLabel: localizedText(config.site.updatedLabel, locale, 'Updated'),
+        t,
       }),
     );
-    searchBox.setHint('输入名称可以继续查询（=精确 / /正则/），按 Esc 返回索引。');
+    searchBox.setHint(t('hint.entryPage'));
     // KaTeX is fetched on demand, and only for pages that actually show a formula.
     void renderMath(shell.view).catch((error) => {
       console.warn('[SearchLADR] 公式渲染初始化失败', error);
@@ -172,20 +228,27 @@ export async function boot(options = {}) {
    * @param {object} collection
    */
   function renderIndexPage(collection) {
+    // Search covers both languages; only the display is localized.
     const outcome = searchEntries(collection.entries, state.route.query, {
       budgetMs: config.search.budgetMs,
       maxResults: config.search.maxResults,
+      collator,
+      t,
     });
     lastIndexOutcome = outcome;
     const searching = !outcome.parsed.isEmpty;
     const list = searching
-      ? outcome.results.map((hit) => hit.entry)
+      ? outcome.results.map((hit) => localizeEntry(hit.entry, locale))
       : null;
+
+    // Localize *first*, so the bucket letter comes from the displayed name
+    // (熵 → S in Chinese, Entropy → E in English).
+    const displayEntries = localizeEntries(collection.entries, locale);
 
     /** @type {Array<{letter: string, entries: Array<object>}>} */
     const groups = searching
       ? [{ letter: '', entries: list ?? [] }]
-      : groupEntriesByInitial(collection.entries);
+      : groupEntriesByInitial(displayEntries, { compare: collator.compare });
 
     const matched = searching ? outcome.results.length : collection.size;
     let rendered = 0;
@@ -204,19 +267,21 @@ export async function boot(options = {}) {
         matched,
         rendered,
         truncated: outcome.truncated || rendered < matched,
+        t,
         emptyTitle: searching
-          ? `没有匹配「${outcome.parsed.raw}」的词条。`
+          ? t('empty.noMatch', { query: outcome.parsed.raw })
           : collection.isEmpty
-            ? '还没有任何词条。'
-            : '索引是空的。',
-        emptyHint: searching
-          ? '可以试试包含匹配（直接输入）、=精确匹配，或 /正则/ 写法。'
-          : '把词条写进 data/entries.json 并提交，索引会自动更新。',
+            ? t('empty.noEntries')
+            : t('empty.noEntries'),
+        emptyHint: searching ? t('empty.hintSearch') : t('empty.hintData'),
       }),
     );
 
+    const countText = outcome.parsed.isEmpty
+      ? t('count.total', { count: matched })
+      : t('count.matched', { count: matched });
     searchBox.setHint(
-      outcome.error !== '' ? outcome.error : `${describeQuery(outcome.parsed)} · 共 ${matched} 条`,
+      outcome.error !== '' ? outcome.error : `${describeQuery(outcome.parsed, t)} · ${countText}`,
       outcome.error !== '' ? 'warning' : 'info',
     );
   }
@@ -227,27 +292,32 @@ export async function boot(options = {}) {
   function renderStatus(entriesState) {
     if (entriesState.error !== '') {
       const hints = {
-        missing: '确认 data/entries.json 已提交到仓库（大小写敏感）。',
-        format: '用 npm test 或 node -e "JSON.parse(...)" 检查该文件的 JSON 语法。',
-        http: '如果刚刚发布，等 GitHub Pages 重建完成后再刷新。',
+        missing: 'status.issueHint.check',
+        format: 'status.issueHint.json',
+        http: 'status.issueHint.http',
       };
+      const hint = hints[entriesState.errorKind];
       status.update({
-        message: `${entriesState.error}${hints[entriesState.errorKind] ? ` ${hints[entriesState.errorKind]}` : ''}`,
+        message: `${entriesState.error}${hint ? ` ${t(hint)}` : ''}`,
         tone: 'error',
       });
       return;
     }
     if (warnings.length > 0) {
-      status.update({ message: warnings[0], tone: 'warning' });
+      const first = warnings[0];
+      status.update({ message: t(first.key, first.params), tone: 'warning' });
       return;
     }
     if (entriesState.stale || entriesState.status === 'loading') {
-      status.update({ message: '正在读取词条…', tone: 'info' });
+      status.update({ message: t('status.loading'), tone: 'info' });
       return;
     }
     if (entriesState.issues.length > 0) {
       status.update({
-        message: `有 ${entriesState.issues.length} 条词条格式不对，已跳过：${entriesState.issues[0].message}`,
+        message: t('status.issues', {
+          count: entriesState.issues.length,
+          index: (entriesState.issues[0].index ?? 0) + 1,
+        }),
         tone: 'warning',
       });
       return;
@@ -260,14 +330,19 @@ export async function boot(options = {}) {
    * @param {import('./data/entries-store.js').EntriesState} entriesState
    */
   function renderFooter(collection, entriesState) {
-    const parts = [`共 ${collection.size} 条`];
+    const parts = [t('count.total', { count: collection.size })];
     // Derived from the entries, so nothing has to be hand-maintained.
     const latest = collection.latestUpdatedAt() || String(collection.updatedAt ?? '').slice(0, 10);
     if (latest !== '') {
-      parts.push(`${config.site.updatedLabel} ${latest}`);
+      parts.push(
+        t('footer.updated', {
+          label: localizedText(config.site.updatedLabel, locale, 'Updated'),
+          date: latest,
+        }),
+      );
     }
     if (entriesState.fetchedAt && entriesState.fromCache) {
-      parts.push('显示本地缓存');
+      parts.push(t('footer.cached'));
     }
     shell.footer.replaceChildren(el('p', { text: parts.join(' · ') }));
   }
@@ -326,6 +401,9 @@ export async function boot(options = {}) {
     state,
     render,
     setQuery,
+    setLocale,
+    getLocale: () => locale,
+    getTranslator: () => t,
     openEntry,
     openEntryBack,
     store,
@@ -335,6 +413,17 @@ export async function boot(options = {}) {
     },
   };
   return { app, store, config };
+}
+
+/**
+ * @param {string} locale
+ * @returns {{compare: (a: string, b: string) => number}} A name collator for the
+ *   active language, with the other language as a tie-breaker.
+ */
+function createLocaleCollator(locale) {
+  return createNameCollator(
+    locale === 'zh' ? ['zh-Hans-CN', 'zh', 'en'] : ['en', 'zh-Hans-CN', 'zh'],
+  );
 }
 
 /**
@@ -355,16 +444,28 @@ function collectShell(root) {
 }
 
 /**
- * @param {Document} root
- * @param {import('./config.js').AppConfig} config
+ * Apply the language-dependent chrome: document title, `<html lang>`, the site
+ * heading, the tagline and the skip link.
+ *
  * @param {Record<keyof typeof SHELL, HTMLElement>} shell
+ * @param {import('./config.js').AppConfig} config
+ * @param {string} locale
+ * @param {Document} [root]
  * @returns {void}
  */
-function applyStaticText(root, config, shell) {
-  shell.title.textContent = config.site.title;
-  shell.tagline.textContent = config.site.tagline;
-  shell.tagline.hidden = config.site.tagline === '';
+function applyLocale(shell, config, locale, root = shell.title.ownerDocument) {
+  const title = localizedText(config.site.title, locale, 'Glossary');
+  const tagline = localizedText(config.site.tagline, locale, '');
+  shell.title.textContent = title;
+  shell.tagline.textContent = tagline;
+  shell.tagline.hidden = tagline === '';
+  shell.title.setAttribute('lang', localeTag(locale));
   if (root.title !== undefined) {
-    root.title = config.site.title;
+    root.title = title;
+  }
+  root.documentElement?.setAttribute('lang', localeTag(locale));
+  const skip = /** @type {HTMLElement|null} */ (root.querySelector('.skip'));
+  if (skip) {
+    skip.textContent = locale === 'zh' ? '跳到内容' : 'Skip to content';
   }
 }

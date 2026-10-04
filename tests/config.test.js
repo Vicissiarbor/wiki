@@ -8,6 +8,7 @@ import {
   mergeConfig,
   normalizeConfig,
 } from '../web/js/config.js';
+import { localizedText, normalizeLocale } from '../web/js/core/locale.js';
 import { createFetchStub } from './helpers/index.js';
 
 describe('mergeConfig', () => {
@@ -27,21 +28,38 @@ describe('mergeConfig', () => {
 
 describe('normalizeConfig', () => {
   it('falls back for empty values', () => {
-    const config = normalizeConfig({ site: { title: '  ' }, data: { url: '' } });
-    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
+    const config = normalizeConfig({ site: { title: '', defaultLocale: 'nope' }, data: { url: '' } });
+    assert.deepEqual(config.site.title, DEFAULT_CONFIG.site.title);
+    assert.equal(config.site.defaultLocale, 'en');
     assert.equal(config.data.url, DEFAULT_CONFIG.data.url);
     assert.equal(config.search.maxResults, DEFAULT_CONFIG.search.maxResults);
   });
 
-  it('accepts a full configuration', () => {
+  it('accepts a full configuration, with per-language site text', () => {
     const config = normalizeConfig({
-      site: { title: '我的词典', tagline: 't', footer: 'f', updatedLabel: '更新' },
+      site: {
+        title: { en: 'My Glossary', zh: '我的词典' },
+        tagline: 't',
+        updatedLabel: 'Updated',
+        defaultLocale: 'zh',
+      },
       data: { url: './data/other.json', timeoutMs: 1000 },
       search: { budgetMs: 100, maxResults: 10 },
     });
-    assert.equal(config.site.title, '我的词典');
+    assert.equal(localizedText(config.site.title, 'en'), 'My Glossary');
+    assert.equal(localizedText(config.site.title, 'zh'), '我的词典');
+    // A plain string serves every language.
+    assert.equal(localizedText(config.site.tagline, 'zh'), 't');
+    assert.equal(config.site.defaultLocale, 'zh');
     assert.equal(config.data.url, './data/other.json');
     assert.equal(config.search.budgetMs, 100);
+  });
+
+  it('normalizes the default locale', () => {
+    assert.equal(normalizeLocale('zh'), 'zh');
+    assert.equal(normalizeLocale('ZH'), 'en');
+    assert.equal(normalizeLocale(undefined, 'zh'), 'zh');
+    assert.equal(normalizeLocale('fr', 'zh'), 'zh');
   });
 });
 
@@ -60,17 +78,18 @@ describe('loadConfig', () => {
   it('uses built-in defaults when config.json is absent', async () => {
     const { fetch } = createFetchStub({});
     const { config, warnings } = await loadConfig({ fetchImpl: fetch });
-    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
+    assert.deepEqual(config.site.title, DEFAULT_CONFIG.site.title);
     assert.equal(config.data.url, './data/entries.json');
     assert.deepEqual(warnings, []);
   });
 
   it('merges config.json over the defaults', async () => {
     const { fetch } = createFetchStub({
-      '*': { body: { site: { title: '词典' }, data: { url: 'data/other.json' } } },
+      '*': { body: { site: { title: '词典', defaultLocale: 'zh' }, data: { url: 'data/other.json' } } },
     });
     const { config } = await loadConfig({ fetchImpl: fetch, configUrl: './config.json' });
-    assert.equal(config.site.title, '词典');
+    assert.equal(localizedText(config.site.title, 'en'), '词典');
+    assert.equal(config.site.defaultLocale, 'zh');
     assert.equal(config.data.url, 'data/other.json');
   });
 
@@ -80,13 +99,16 @@ describe('loadConfig', () => {
     });
     const { config, warnings } = await loadConfig({ fetchImpl: fetch });
     assert.equal(config.data.url, DEFAULT_CONFIG.data.url);
-    assert.match(warnings[0], /相对路径/);
+    // Warnings are keys plus parameters: the language is not known yet here.
+    assert.equal(warnings[0].key, 'config.notRelative');
+    assert.equal(warnings[0].params.url, 'https://example.com/entries.json');
   });
 
   it('warns about a broken config.json but keeps working', async () => {
     const { fetch } = createFetchStub({ '*': { status: 500, body: {} } });
     const { config, warnings } = await loadConfig({ fetchImpl: fetch });
-    assert.equal(config.site.title, DEFAULT_CONFIG.site.title);
-    assert.match(warnings[0], /500/);
+    assert.deepEqual(config.site.title, DEFAULT_CONFIG.site.title);
+    assert.equal(warnings[0].key, 'config.unreadable');
+    assert.equal(warnings[0].params.status, 500);
   });
 });

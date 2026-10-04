@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { createTranslator } from '../web/js/core/i18n.js';
 import {
   MAX_QUERY_LENGTH,
   SearchMode,
@@ -14,6 +15,9 @@ import {
   searchEntries,
   splitByMatches,
 } from '../web/js/core/search.js';
+
+const zh = createTranslator('zh');
+const en = createTranslator('en');
 
 /** A small fixture covering every field. */
 const entries = [
@@ -87,21 +91,28 @@ describe('parseQuery', () => {
     const parsed = parseQuery('tag:');
     assert.notEqual(parsed.error, '');
     assert.equal(parsed.isEmpty, false);
+    assert.match(parsed.error, /Type something after “tag”/);
+    assert.match(parseQuery('tag:', { t: zh }).error, /请在 “tag” 后/);
   });
 
   it('reports invalid regex instead of throwing', () => {
     const parsed = parseQuery('/[/');
-    assert.match(parsed.error, /正则表达式无效/);
+    // The default language is English…
+    assert.match(parsed.error, /Invalid regular expression/);
     assert.equal(parsed.regex, null);
+    // …and the same query speaks Chinese when asked to.
+    assert.match(parseQuery('/[/', { t: zh }).error, /正则表达式无效/);
   });
 
   it('rejects stateful regex flags', () => {
     assert.match(parseQuery('/a/g').error, /g \/ y/);
+    assert.match(parseQuery('/a/g', { t: zh }).error, /不支持 g \/ y/);
   });
 
   it('rejects over-long queries', () => {
     const parsed = parseQuery('x'.repeat(MAX_QUERY_LENGTH + 1));
-    assert.match(parsed.error, /查询过长/);
+    assert.match(parsed.error, /too long/i);
+    assert.match(parseQuery('x'.repeat(MAX_QUERY_LENGTH + 1), { t: zh }).error, /查询过长/);
   });
 });
 
@@ -184,13 +195,16 @@ describe('matching', () => {
   it('reports a parser error and no results', () => {
     const result = searchEntries(entries, '/[/');
     assert.equal(result.results.length, 0);
-    assert.match(result.error, /无效/);
+    assert.match(result.error, /Invalid regular expression/);
+    assert.match(searchEntries(entries, '/[/', { t: zh }).error, /无效/);
   });
 
-  it('describes the effective query', () => {
-    assert.equal(describeQuery(parseQuery('')), '浏览全部词条（按首字母排序）');
-    assert.match(describeQuery(parseQuery('=熵')), /精确匹配/);
-    assert.match(describeQuery(parseQuery('tag:x')), /tags/);
+  it('describes the effective query in the requested language', () => {
+    assert.equal(describeQuery(parseQuery('')), 'Browsing all entries (sorted by initial)');
+    assert.equal(describeQuery(parseQuery(''), zh), '浏览全部词条（按首字母排序）');
+    assert.equal(describeQuery(parseQuery('=熵'), zh), '精确匹配 · 全字段');
+    assert.equal(describeQuery(parseQuery('=熵')), 'Exact match · all fields');
+    assert.match(describeQuery(parseQuery('tag:x'), zh), /标签/);
   });
 
   it('exposes the searched fields', () => {
@@ -210,7 +224,8 @@ describe('matching', () => {
     // reject it before any matching happens.
     const result = searchEntries(entries, '/(a+)+b/');
     assert.equal(result.results.length, 0);
-    assert.match(result.error, /灾难性回溯/);
+    assert.match(result.error, /backtrack catastrophically/);
+    assert.match(searchEntries(entries, '/(a+)+b/', { t: zh }).error, /灾难性回溯/);
     assert.equal(result.scanned, 0);
   });
 
@@ -220,6 +235,7 @@ describe('matching', () => {
     assert.equal(assessRegexRisk('(a+)+').risky, true);
     assert.equal(assessRegexRisk('(a|a)+').risky, true);
     assert.equal(assessRegexRisk('.*.*x').risky, true);
+    assert.match(assessRegexRisk('(a+)+', zh).reason, /嵌套量词/);
   });
 
   it('truncates very long subjects for regex matching', () => {
@@ -240,7 +256,8 @@ describe('matching', () => {
     const result = searchEntries(many, '/a{1,200}b/', { budgetMs: 0 });
     assert.equal(result.truncated, true);
     assert.ok(result.scanned < many.length);
-    assert.match(result.error, /部分结果/);
+    assert.match(result.error, /partial results/);
+    assert.match(searchEntries(many, '/a{1,200}b/', { budgetMs: 0, t: zh }).error, /部分结果/);
   });
 
   it('caps the number of results', () => {

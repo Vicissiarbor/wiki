@@ -12,7 +12,11 @@
  * search box responsive while the user is still typing.
  */
 
+import { createTranslator } from './i18n.js';
 import { createNameCollator } from './sort.js';
+
+/** Default translator: English, matching the site's default locale. */
+const defaultTranslate = createTranslator('en');
 
 /** @typedef {'contains' | 'exact' | 'regex'} SearchMode */
 
@@ -97,20 +101,21 @@ export function normalizeForMatch(value) {
  * expression. See docs/search-syntax.md for safe rewrites.
  */
 const RISKY_REGEX_PATTERNS = Object.freeze([
-  { pattern: /\((?:[^()\\]|\\.)*[*+][^()\\]*(?:[*+?]|\{\d)/, reason: '分组内部已有量词，分组外又叠加了量词' },
-  { pattern: /\((?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)\s*(?:[*+]|\{\d)/, reason: '对含“|”的分组做量词会指数级回溯' },
-  { pattern: /(?:\.\*|\.\+)[^)]*(?:\.\*|\.\+)/, reason: '连续的 .* 或 .+ 会造成指数级回溯' },
-  { pattern: /\((?:[^()\\]|\\.)*[*+](?:[^()\\]|\\.)*\)\s*(?:[*+]|\{\d)/, reason: '嵌套量词（如 (a+)+）' },
+  { pattern: /\((?:[^()\\]|\\.)*[*+][^()\\]*(?:[*+?]|\{\d)/, reason: 'search.reason.nested' },
+  { pattern: /\((?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)\s*(?:[*+]|\{\d)/, reason: 'search.reason.alternation' },
+  { pattern: /(?:\.\*|\.\+)[^)]*(?:\.\*|\.\+)/, reason: 'search.reason.wildcards' },
+  { pattern: /\((?:[^()\\]|\\.)*[*+](?:[^()\\]|\\.)*\)\s*(?:[*+]|\{\d)/, reason: 'search.reason.nested' },
 ]);
 
 /**
  * @param {string} source Regex source as typed by the user.
+ * @param {(key: string) => string} [t] Translator for the reason text.
  * @returns {{risky: boolean, reason: string}}
  */
-export function assessRegexRisk(source) {
+export function assessRegexRisk(source, t = defaultTranslate) {
   for (const { pattern, reason } of RISKY_REGEX_PATTERNS) {
     if (pattern.test(source)) {
-      return { risky: true, reason };
+      return { risky: true, reason: t(reason) };
     }
   }
   return { risky: false, reason: '' };
@@ -119,26 +124,27 @@ export function assessRegexRisk(source) {
 /**
  * @param {string} source
  * @param {string} flags
+ * @param {(key: string, params?: Record<string, unknown>) => string} t
  * @returns {{regex: RegExp|null, error: string}}
  */
-function compileRegex(source, flags) {
+function compileRegex(source, flags, t) {
   const finalFlags = flags === '' ? 'i' : flags;
   if (/[gy]/.test(finalFlags)) {
     // Stateful flags would make repeated .test() calls lie; matching adds them when needed.
-    return { regex: null, error: '正则表达式不支持 g / y 标志。' };
+    return { regex: null, error: t('search.error.regexFlags') };
   }
-  const risk = assessRegexRisk(source);
+  const risk = assessRegexRisk(source, t);
   if (risk.risky) {
-    return {
-      regex: null,
-      error: `该正则表达式可能导致灾难性回溯（${risk.reason}），已拒绝执行。请改写表达式，例如把 (a+)+ 改成 a+。`,
-    };
+    return { regex: null, error: t('search.error.regexRisky', { reason: risk.reason }) };
   }
   try {
     return { regex: new RegExp(source, finalFlags), error: '' };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { regex: null, error: `正则表达式无效：${message}` };
+    // Engines already prefix this; keep the detail and avoid saying it twice.
+    const message = (error instanceof Error ? error.message : String(error))
+      .replace(/^Invalid regular expression:\s*/i, '')
+      .trim();
+    return { regex: null, error: t('search.error.regexInvalid', { message }) };
   }
 }
 
@@ -146,10 +152,13 @@ function compileRegex(source, flags) {
  * Parse a raw query string.
  *
  * @param {string} raw
- * @param {{mode?: SearchMode}} [options] Mode chosen in the UI; syntax markers still win.
+ * @param {{mode?: SearchMode, t?: (key: string, params?: Record<string, unknown>) => string}} [options]
+ *   `mode` is the mode chosen in the UI (syntax markers still win); `t` is the
+ *   translator used for error messages, defaulting to English.
  * @returns {ParsedQuery}
  */
 export function parseQuery(raw, options = {}) {
+  const t = options.t ?? defaultTranslate;
   const text = String(raw ?? '').normalize('NFC').trim();
   /** @type {ParsedQuery} */
   const parsed = {
@@ -167,7 +176,7 @@ export function parseQuery(raw, options = {}) {
   if (text.length > MAX_QUERY_LENGTH) {
     parsed.term = text.slice(0, MAX_QUERY_LENGTH);
     parsed.isEmpty = false;
-    parsed.error = `查询过长：最多 ${MAX_QUERY_LENGTH} 个字符。`;
+    parsed.error = t('search.error.tooLong', { max: MAX_QUERY_LENGTH });
     return parsed;
   }
 
@@ -180,7 +189,7 @@ export function parseQuery(raw, options = {}) {
       rest = rest.slice(scopeMatch[0].length).trim();
       if (rest === '') {
         parsed.isEmpty = false;
-        parsed.error = `请在 “${scopeMatch[1]}” 后输入要查找的内容。`;
+        parsed.error = t('search.error.scopeEmpty', { scope: scopeMatch[1] });
         return parsed;
       }
     }
@@ -189,7 +198,7 @@ export function parseQuery(raw, options = {}) {
   const literal = REGEX_LITERAL.exec(rest);
   if (literal && literal[1] !== '') {
     // `/pattern/flags` always means regex, whatever the selector says.
-    const { regex, error } = compileRegex(literal[1], literal[2] ?? '');
+    const { regex, error } = compileRegex(literal[1], literal[2] ?? '', t);
     parsed.mode = SearchMode.REGEX;
     parsed.term = literal[1];
     parsed.regex = regex;
@@ -211,7 +220,7 @@ export function parseQuery(raw, options = {}) {
   parsed.isEmpty = parsed.term === '';
 
   if (parsed.mode === SearchMode.REGEX) {
-    const { regex, error } = compileRegex(parsed.term, '');
+    const { regex, error } = compileRegex(parsed.term, '', t);
     parsed.regex = regex;
     parsed.error = error;
   }
@@ -257,17 +266,32 @@ export function fieldsForQuery(parsed) {
  * @returns {string[]} Values stored in `field` (aliases/tags may hold several).
  */
 function valuesOf(entry, field) {
+  /**
+   * Search always covers **both languages**, whatever the interface language is:
+   * looking up “复数” must find the entry whose displayed name is “Complex
+   * Number”. Chinese lives in the `…Zh` sibling fields (see core/locale.js).
+   *
+   * @param {string} base
+   * @param {string} overlay
+   * @returns {string[]}
+   */
+  const both = (base, overlay) => [base, overlay].filter((value) => typeof value === 'string' && value !== '');
+  const bothLists = (base, overlay) => [
+    ...(Array.isArray(base) ? base : []),
+    ...(Array.isArray(overlay) ? overlay : []),
+  ];
+
   switch (field) {
     case 'name':
-      return [String(entry.name ?? '')];
+      return both(String(entry.name ?? ''), String(entry.nameZh ?? ''));
     case 'aliases':
-      return Array.isArray(entry.aliases) ? entry.aliases : [];
+      return bothLists(entry.aliases, entry.aliasesZh);
     case 'tags':
-      return Array.isArray(entry.tags) ? entry.tags : [];
+      return bothLists(entry.tags, entry.tagsZh);
     case 'summary':
-      return [String(entry.summary ?? '')];
+      return both(String(entry.summary ?? ''), String(entry.summaryZh ?? ''));
     case 'content':
-      return [String(entry.content ?? '')];
+      return both(String(entry.content ?? ''), String(entry.contentZh ?? ''));
     default:
       return [];
   }
@@ -374,12 +398,13 @@ const now = clock();
  * @param {object[]} entries
  * @param {string} rawQuery
  * @param {{mode?: SearchMode, budgetMs?: number, maxResults?: number,
- *   compare?: (a: string, b: string) => number, collator?: {compare: (a: string, b: string) => number}}} [options]
+ *   compare?: (a: string, b: string) => number, collator?: {compare: (a: string, b: string) => number},
+ *   t?: (key: string, params?: Record<string, unknown>) => string}} [options]
  * @returns {SearchOutcome}
  */
 export function searchEntries(entries, rawQuery, options = {}) {
   const started = now();
-  const parsed = parseQuery(rawQuery, { mode: options.mode });
+  const parsed = parseQuery(rawQuery, { mode: options.mode, t: options.t });
   /** @type {SearchOutcome} */
   const outcome = {
     parsed,
@@ -418,7 +443,7 @@ export function searchEntries(entries, rawQuery, options = {}) {
     }
     if ((outcome.scanned & 0xf) === 0 && now() - started > budgetMs) {
       outcome.truncated = true;
-      outcome.error = `搜索超过 ${budgetMs} 毫秒，已返回部分结果。请尝试更精确的查询。`;
+      outcome.error = (options.t ?? defaultTranslate)('search.error.budget', { ms: budgetMs });
       break;
     }
   }
@@ -525,15 +550,23 @@ export function findMatches(value, parsed, options = {}) {
  * @param {ParsedQuery} parsed
  * @returns {string}
  */
-export function describeQuery(parsed) {
+export function describeQuery(parsed, t = defaultTranslate) {
   if (parsed.error !== '') {
     return parsed.error;
   }
   if (parsed.isEmpty) {
-    return '浏览全部词条（按首字母排序）';
+    return t('hint.browse');
   }
-  const mode = parsed.mode === SearchMode.EXACT ? '精确匹配' : parsed.mode === SearchMode.REGEX ? '正则匹配' : '包含匹配';
-  const scope = parsed.scope === '' ? '全字段' : parsed.scope === 'text' ? '全字段' : parsed.scope;
+  const mode =
+    parsed.mode === SearchMode.EXACT
+      ? t('hint.exact')
+      : parsed.mode === SearchMode.REGEX
+        ? t('hint.regex')
+        : t('hint.contains');
+  const scope =
+    parsed.scope === '' || parsed.scope === 'text'
+      ? t('hint.fields.all')
+      : t(`hint.fields.${parsed.scope}`);
   return `${mode} · ${scope}`;
 }
 

@@ -29,11 +29,17 @@ describe('normalizeEntry', () => {
     assert.deepEqual(entry, {
       id: 'x',
       name: '熵',
+      nameZh: '',
       aliases: ['entropy'],
+      aliasesZh: [],
       initial: '',
+      initialZh: '',
       tags: ['solo'],
+      tagsZh: [],
       summary: 'a b',
+      summaryZh: '',
       content: '',
+      contentZh: '',
       createdAt: '',
       updatedAt: '',
     });

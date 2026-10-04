@@ -74,6 +74,26 @@ describe('EntryCollection', () => {
     assert.equal(collection.byName('A').id, 'a');
   });
 
+  it('finds entries through the Chinese name and aliases', () => {
+    const { collection } = EntryCollection.fromDocument({
+      entries: [
+        {
+          id: 'entropy',
+          name: 'Entropy',
+          nameZh: '熵',
+          aliases: ['information entropy'],
+          aliasesZh: ['信息熵'],
+        },
+        { id: 'abandon', name: 'abandon' },
+      ],
+    });
+    assert.equal(collection.byName('熵').id, 'entropy');
+    assert.equal(collection.byName('信息熵').id, 'entropy');
+    assert.equal(collection.byName('ENTROPY').id, 'entropy');
+    assert.equal(collection.byName('nope'), null);
+    assert.equal(collection.byName(''), null);
+  });
+
   it('is immutable: withEntry/withoutEntry return new collections', () => {
     const { collection } = EntryCollection.fromDocument(sample());
     const added = collection.withEntry({ id: 'c', name: 'Gamma' });

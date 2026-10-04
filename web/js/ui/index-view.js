@@ -18,6 +18,7 @@ import { findMatches } from '../core/search.js';
  * @property {boolean} truncated True when a cap cut the list short.
  * @property {string} emptyTitle Message shown when there is nothing to list.
  * @property {string} emptyHint Second line of that message.
+ * @property {(key: string, params?: Record<string, unknown>) => string} [t] Translator.
  */
 
 /**
@@ -30,12 +31,15 @@ export function renderIndex(model) {
   /** @type {Array<Node|string|null>} */
   const nodes = [];
 
+  const t = model.t ?? ((/** @type {string} */ key) => key);
   if (model.matched > 0) {
     nodes.push(
       el('p.count', {
         text: searching
-          ? `命中 ${model.matched} 条${model.rendered < model.matched ? `，显示前 ${model.rendered} 条` : ''}`
-          : `共 ${model.total} 条`,
+          ? `${t('count.matched', { count: model.matched })}${
+              model.rendered < model.matched ? `, ${t('count.showing', { shown: model.rendered })}` : ''
+            }`
+          : t('count.total', { count: model.total }),
       }),
     );
   }
@@ -74,11 +78,7 @@ export function renderIndex(model) {
   }
 
   if (model.truncated) {
-    nodes.push(
-      el('p.truncated', {
-        text: '结果过多，只显示了一部分。请把查询写得更具体一些（例如加上字段前缀 tag:）。',
-      }),
-    );
+    nodes.push(el('p.truncated', { text: t('truncated.note', { count: model.rendered }) }));
   }
 
   return /** @type {DocumentFragment} */ (fragment(nodes));

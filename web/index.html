@@ -12,10 +12,13 @@
     <link rel="stylesheet" href="./assets/style.css" />
   </head>
   <body>
-    <a class="skip" href="#view">跳到内容</a>
+    <a class="skip" href="#view">跳到内容 · Skip to content</a>
 
     <header class="masthead">
-      <h1 id="site-title">概念词条库</h1>
+      <div class="masthead__top">
+        <h1 id="site-title">概念词条库</h1>
+        <div id="lang-host"></div>
+      </div>
       <p id="site-tagline" class="tagline"></p>
       <div id="search-host"></div>
       <div id="status-host"></div>
@@ -33,8 +36,10 @@
 
     <noscript>
       <p class="noscript">
-        索引与词条需要 JavaScript 才能显示。数据本身在
-        <a href="./data/entries.json">data/entries.json</a>，可以直接下载查看。
+        The index and the entries need JavaScript. The data itself is in
+        <a href="./data/entries.json">data/entries.json</a> and can be downloaded
+        directly. ／ 索引与词条需要 JavaScript 才能显示，数据本身在
+        <a href="./data/entries.json">data/entries.json</a>。
       </p>
     </noscript>
 

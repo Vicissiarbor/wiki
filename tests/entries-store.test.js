@@ -36,6 +36,20 @@ function makeStore(options = {}) {
 }
 
 describe('entries store - loading', () => {
+  it('speaks the interface language for its own messages', async () => {
+    const { createTranslator } = await import('../web/js/core/i18n.js');
+    const storage = memoryStorage();
+    const { fetch } = createFetchStub({ [URL_UNDER_TEST]: { status: 404, body: {} } });
+    const store = createEntriesStore({
+      url: URL_UNDER_TEST,
+      storage,
+      fetchImpl: fetch,
+      t: createTranslator('zh'),
+    });
+    await store.load();
+    assert.match(store.getState().error, /找不到词条文件/);
+  });
+
   it('starts loading, then reports the parsed bundle', async () => {
     const { store } = makeStore();
     const seen = [];
@@ -76,7 +90,7 @@ describe('entries store - loading', () => {
     // The refresh failed, so the cached copy stays on screen (and stays flagged).
     assert.equal(second.getState().fromCache, true);
     assert.equal(second.getState().status, 'ready');
-    assert.match(second.getState().error, /无法读取/);
+    assert.match(second.getState().error, /Could not read/);
   });
 
   it('skips malformed entries but reports them', async () => {
@@ -94,6 +108,7 @@ describe('entries store - loading', () => {
     assert.equal(store.getState().status, 'error');
     assert.equal(store.getState().errorKind, 'missing');
     assert.match(store.getState().error, /404/);
+    assert.match(store.getState().error, /not found/i);
   });
 
   it('reports invalid JSON', async () => {
@@ -107,7 +122,7 @@ describe('entries store - loading', () => {
     const store = createEntriesStore({ url: URL_UNDER_TEST, storage, fetchImpl });
     await store.load();
     assert.equal(store.getState().errorKind, 'format');
-    assert.match(store.getState().error, /不是合法的 JSON/);
+    assert.match(store.getState().error, /not valid JSON/);
   });
 
   it('reports a network failure', async () => {

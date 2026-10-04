@@ -114,8 +114,23 @@ export class EntryCollection {
     this._entries = Object.freeze(entries.map((entry) => Object.freeze({ ...entry })));
     /** @type {Map<string, import('./entry.js').Entry>} */
     this._byId = new Map(this._entries.map((entry) => [entry.id, entry]));
-    /** @type {Map<string, import('./entry.js').Entry>} */
-    this._byName = new Map(this._entries.map((entry) => [entry.name.toLowerCase(), entry]));
+    /**
+     * Lookup index for `byName`: English and Chinese names, plus the aliases of
+     * both languages — a Chinese body that writes `[[熵]]` must resolve even
+     * while the interface is showing English names.
+     *
+     * @type {Map<string, import('./entry.js').Entry>}
+     */
+    this._byName = new Map();
+    for (const entry of this._entries) {
+      const keys = [entry.name, entry.nameZh, ...entry.aliases, ...entry.aliasesZh];
+      for (const key of keys) {
+        const normalized = String(key ?? '').toLowerCase();
+        if (normalized !== '' && !this._byName.has(normalized)) {
+          this._byName.set(normalized, entry);
+        }
+      }
+    }
     this.version = meta.version ?? DOCUMENT_VERSION;
     this.updatedAt = meta.updatedAt ?? '';
   }
@@ -163,7 +178,7 @@ export class EntryCollection {
   }
 
   /**
-   * Case-insensitive name lookup (also considers aliases).
+   * Case-insensitive lookup by name or alias, in either language.
    *
    * @param {string} name
    * @returns {import('./entry.js').Entry|null}
@@ -173,16 +188,7 @@ export class EntryCollection {
     if (key === '') {
       return null;
     }
-    const direct = this._byName.get(key);
-    if (direct) {
-      return direct;
-    }
-    for (const entry of this._entries) {
-      if (entry.aliases.some((alias) => alias.toLowerCase() === key)) {
-        return entry;
-      }
-    }
-    return null;
+    return this._byName.get(key) ?? null;
   }
 
   /**

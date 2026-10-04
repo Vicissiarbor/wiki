@@ -12,6 +12,7 @@ import { after, before, describe, it } from 'node:test';
 import { JSDOM } from 'jsdom';
 
 import { boot } from '../web/js/app.js';
+import { createStorage } from '../web/js/util/storage.js';
 import { memoryStorage, response } from './helpers/index.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,7 +24,8 @@ const ENTRIES = {
   entries: [
     {
       id: 'entropy',
-      name: '熵',
+      name: 'Entropy',
+      nameZh: '熵',
       aliases: ['entropy', '信息熵'],
       tags: ['物理'],
       summary: '度量不确定性',
@@ -33,7 +35,8 @@ const ENTRIES = {
     },
     {
       id: 'enthalpy',
-      name: '焓',
+      name: 'Enthalpy',
+      nameZh: '焓',
       aliases: ['enthalpy'],
       tags: ['物理'],
       summary: '热力学状态函数',
@@ -42,7 +45,8 @@ const ENTRIES = {
     },
     {
       id: 'xss',
-      name: '注入测试',
+      name: 'XSS probe',
+      nameZh: '注入测试',
       tags: ['安全'],
       summary: '不应执行任何脚本',
       content:
@@ -59,7 +63,8 @@ const ENTRIES = {
 };
 
 /**
- * @param {{entries?: object, url?: string, failEntries?: boolean, config?: object}} [options]
+ * @param {{entries?: object, url?: string, failEntries?: boolean, config?: object,
+ *   storage?: object}} [options]
  * @returns {Promise<{dom: JSDOM, app: object, store: object}>}
  */
 async function startSite(options = {}) {
@@ -88,7 +93,7 @@ async function startSite(options = {}) {
     root: dom.window.document,
     win: dom.window,
     fetchImpl: /** @type {any} */ (fetchImpl),
-    storage: memoryStorage(),
+    storage: options.storage ?? memoryStorage(),
     configUrl: './config.json',
   });
   return { dom, ...booted };
@@ -183,11 +188,12 @@ describe('index page', () => {
   });
 
   it('renders letter headings and one link per entry', () => {
+    // English default: the names are Alphabetical, Enthalpy, Entropy, XSS probe.
     assert.deepEqual(
       [...doc.querySelectorAll('h2.letter')].map((node) => node.textContent),
-      ['B', 'H', 'S', 'Z'], // Binary Search / 焓 hán / 熵 shāng / 注入测试 zhù
+      ['B', 'E', 'X'],
     );
-    assert.deepEqual(listed(), ['Binary Search', '焓', '熵', '注入测试']);
+    assert.deepEqual(listed(), ['Binary Search', 'Enthalpy', 'Entropy', 'XSS probe']);
   });
 
   it('links every entry with a hash route', () => {
@@ -201,27 +207,29 @@ describe('index page', () => {
 
   it('provides the search box, a submit button and a hint line', () => {
     assert.ok(input);
-    assert.equal(doc.querySelector('.search__label').textContent, '查询');
-    assert.equal(doc.querySelector('.search__submit').textContent, '查找');
-    assert.match(doc.querySelector('.search__hint').textContent, /浏览全部词条/);
+    assert.equal(doc.querySelector('.search__label').textContent, 'Search');
+    assert.equal(doc.querySelector('.search__submit').textContent, 'Find');
+    assert.match(doc.querySelector('.search__hint').textContent, /Browsing all entries/);
   });
 
   it('shows the totals and the latest update derived from the entries', () => {
     const footer = doc.querySelector('#site-footer').textContent;
-    assert.match(footer, /共 4 条/);
+    assert.match(footer, /4 entries/);
     // 2025-01-03 comes from 焓's updatedAt (day precision), not from the
     // document-level timestamp — nothing has to be hand-maintained.
-    assert.match(footer, /更新于 2025-01-03/);
+    assert.match(footer, /Updated 2025-01-03/);
   });
 
   it('no longer prints the removed footer note', () => {
     const footer = doc.querySelector('#site-footer').textContent;
-    assert.ok(!footer.includes('通过提交仓库更新'));
+    assert.ok(!footer.includes('提交仓库更新'));
+    assert.ok(!footer.includes('静态站点'));
     assert.equal(doc.querySelector('.footer__note'), null);
   });
 
-  it('sets the document title from the config', () => {
-    assert.equal(doc.title, '概念词条库');
+  it('sets the document title from the config, in the current language', () => {
+    assert.equal(doc.title, 'Concept Glossary');
+    assert.equal(doc.documentElement.getAttribute('lang'), 'en');
   });
 });
 
@@ -239,66 +247,77 @@ describe('searching', () => {
 
   it('filters on a contains match, without letter headings', () => {
     search('物理');
-    assert.deepEqual(listed(), ['焓', '熵']);
+    // Equal score (both matched by tag), so the shorter name comes first.
+    assert.deepEqual(listed(), ['Entropy', 'Enthalpy']);
     assert.equal(doc.querySelectorAll('h2.letter').length, 0);
-    assert.match(doc.querySelector('p.count').textContent, /命中 2 条/);
+    assert.match(doc.querySelector('p.count').textContent, /2 matched/);
   });
 
   it('highlights what matched', () => {
-    search('焓');
+    search('Entropy');
     const marks = [...doc.querySelectorAll('a.term mark')].map((node) => node.textContent);
-    assert.ok(marks.includes('焓'));
+    assert.ok(marks.includes('Entropy'));
     assert.equal(doc.querySelectorAll('h2.letter').length, 0);
   });
 
   it('supports the "=" prefix for an exact match', () => {
-    search('=焓');
-    assert.deepEqual(listed(), ['焓']);
-    search('=焓x');
+    search('=Enthalpy');
+    assert.deepEqual(listed(), ['Enthalpy']);
+    search('=Enthalpyx');
     assert.equal(listed().length, 0);
+    // Chinese works as an exact match too, whatever the interface language is.
+    search('=熵');
+    assert.deepEqual(listed(), ['Entropy']);
   });
 
   it('matches aliases in exact mode', () => {
     search('=entropy');
-    assert.deepEqual(listed(), ['熵']);
+    assert.deepEqual(listed(), ['Entropy']);
   });
 
   it('supports regular expressions', () => {
-    search('/^焓|^熵$/');
-    assert.deepEqual(listed(), ['焓', '熵']);
+    search('/^Enthalpy|^Entropy$/');
+    assert.deepEqual(listed(), ['Entropy', 'Enthalpy']);
     search('/^enthal/');
-    assert.deepEqual(listed(), ['焓']);
+    assert.deepEqual(listed(), ['Enthalpy']);
   });
 
   it('reports an invalid regular expression', () => {
     search('/[/');
     assert.equal(listed().length, 0);
-    assert.match(doc.querySelector('.search__hint').textContent, /正则表达式无效/);
+    assert.match(doc.querySelector('.search__hint').textContent, /Invalid regular expression/);
   });
 
   it('refuses a catastrophic regular expression instead of freezing', () => {
     search('/(a+)+b/');
     assert.equal(listed().length, 0);
-    assert.match(doc.querySelector('.search__hint').textContent, /灾难性回溯/);
+    assert.match(doc.querySelector('.search__hint').textContent, /backtrack catastrophically/);
   });
 
   it('scopes a query to a field', () => {
     search('tag:算法');
     assert.deepEqual(listed(), ['Binary Search']);
     search('content:log p');
-    assert.deepEqual(listed(), ['熵']);
+    assert.deepEqual(listed(), ['Entropy']);
+    // Chinese tags and bodies are searchable while the interface is English.
+    search('tag:安全');
+    assert.deepEqual(listed(), ['XSS probe']);
   });
 
   it('explains an empty result set', () => {
     search('zzzz');
     assert.equal(listed().length, 0);
-    assert.match(doc.querySelector('.empty__title').textContent, /没有匹配/);
+    assert.match(doc.querySelector('.empty__title').textContent, /Nothing matches/);
   });
 
   it('returns to the index when the query is cleared', () => {
     search('');
     assert.equal(listed().length, 4);
-    assert.equal(doc.querySelectorAll('h2.letter').length, 4);
+    // English default: B(inary Search) / E(ntropy, nthalpy) / X(SS probe).
+    assert.deepEqual(
+      [...doc.querySelectorAll('h2.letter')].map((node) => node.textContent),
+      ['B', 'E', 'X'],
+    );
   });
 
   it('puts the query in the URL so a search can be shared', () => {
@@ -311,10 +330,10 @@ describe('searching', () => {
     search('=enthalpy');
     fire(doc.querySelector('form.search'), 'submit');
     assert.match(site.dom.window.location.hash, /#\/e\/enthalpy$/);
-    assert.equal(doc.querySelector('.entry-title').textContent, '焓');
+    assert.equal(doc.querySelector('.entry-title').textContent, 'Enthalpy');
   });
 
-  it('clears the query with the 清空 button', () => {
+  it('clears the query with the clear button', () => {
     search('焓');
     const clearButton = /** @type {HTMLElement} */ (doc.querySelector('.search__clear'));
     assert.equal(clearButton.hidden, false);
@@ -349,11 +368,11 @@ describe('entry pages', () => {
 
   it('navigates from the index to an entry page', () => {
     openFromIndex('entropy');
-    assert.equal(doc.querySelector('.entry-title').textContent, '熵');
-    assert.match(doc.querySelector('.meta-line').textContent, /别名：/);
+    assert.equal(doc.querySelector('.entry-title').textContent, 'Entropy');
+    assert.match(doc.querySelector('.meta-line').textContent, /Aliases: /);
     assert.match(doc.querySelector('.summary').textContent, /度量不确定性/);
     assert.ok(doc.querySelector('.crumbs a').getAttribute('href') === '#/');
-    assert.match(doc.querySelector('.crumbs').textContent, /更新于 2025-01-02/);
+    assert.match(doc.querySelector('.crumbs').textContent, /Updated 2025-01-02/);
   });
 
   it('renders the Markdown body, including tables', () => {
@@ -368,11 +387,12 @@ describe('entry pages', () => {
   });
 
   it('offers previous/next navigation in dictionary order', () => {
-    // Dictionary order is B(inary Search) → H(焓) → S(熵) → Z(注入测试),
-    // so 熵's neighbours are 焓 and 注入测试.
+    // English order: Binary Search → Enthalpy → Entropy → XSS probe,
+    // so Entropy's neighbours are Enthalpy and XSS probe.
     const pager = doc.querySelector('.pager');
-    assert.match(pager.textContent, /← 焓/);
-    assert.match(pager.textContent, /注入测试 →/);
+    assert.match(pager.textContent, /← Enthalpy/);
+    assert.match(pager.textContent, /XSS probe →/);
+    assert.equal(doc.querySelectorAll('.pager a').length, 2);
   });
 
   it('returns to the index with the back link', () => {
@@ -384,12 +404,12 @@ describe('entry pages', () => {
   it('jumps to another entry by clicking its wiki link', () => {
     openFromIndex('entropy');
     followLink(/** @type {HTMLElement} */ (doc.querySelector('.prose a.term-link')));
-    assert.equal(doc.querySelector('.entry-title').textContent, '焓');
+    assert.equal(doc.querySelector('.entry-title').textContent, 'Enthalpy');
   });
 
   it('shows a helpful page for a link that no longer resolves', () => {
     site.app.openEntry('deleted-entry');
-    assert.match(doc.querySelector('.entry-title').textContent, /没有这个词条/);
+    assert.match(doc.querySelector('.entry-title').textContent, /No such entry/);
     assert.match(doc.querySelector('#view').textContent, /deleted-entry/);
   });
 
@@ -466,13 +486,137 @@ describe('math and dates on an entry page', () => {
 
   it('shows a day-precision timestamp exactly as written', () => {
     site.app.openEntry('enthalpy');
-    assert.match(doc.querySelector('.crumbs').textContent, /更新于 2025-01-03/);
+    assert.match(doc.querySelector('.crumbs').textContent, /Updated 2025-01-03/);
   });
 
   it('does not shift a day-precision date across time zones', () => {
     // 2025-01-03 must never render as 2025-01-02 (UTC parsing would do that).
     site.app.openEntry('enthalpy');
     assert.ok(!doc.querySelector('.crumbs').textContent.includes('2025-01-02'));
+  });
+});
+
+describe('language switch', () => {
+  /** @type {Awaited<ReturnType<typeof startSite>>} */
+  let site;
+  /** @type {Document} */
+  let doc;
+
+  /**
+   * @param {string} locale
+   * @returns {void}
+   */
+  function switchTo(locale) {
+    const button = /** @type {HTMLElement} */ (doc.querySelector(`.lang__item[data-locale="${locale}"]`));
+    assert.ok(button, `no ${locale} button`);
+    button.click();
+  }
+
+  before(async () => {
+    site = await startSite();
+    doc = site.dom.window.document;
+    DomEvent = site.dom.window.Event;
+  });
+
+  after(() => {
+    site.app.destroy();
+  });
+
+  it('starts in English and marks the active language', () => {
+    assert.equal(site.app.getLocale(), 'en');
+    assert.equal(doc.querySelector('.lang__label').textContent, 'Language');
+    assert.equal(doc.querySelector('.lang__item[data-locale="en"]').classList.contains('is-active'), true);
+    assert.equal(doc.querySelector('.lang__item[data-locale="en"]').disabled, true);
+    assert.equal(doc.querySelector('.lang__item[data-locale="zh"]').disabled, false);
+  });
+
+  it('switches the header, search box, index and footer together', () => {
+    switchTo('zh');
+
+    assert.equal(site.app.getLocale(), 'zh');
+    assert.equal(doc.querySelector('#site-title').textContent, '概念词条库');
+    assert.equal(doc.querySelector('#site-tagline').textContent, '输入名称查询，或直接翻阅下面的索引。');
+    assert.equal(doc.title, '概念词条库');
+    assert.equal(doc.documentElement.getAttribute('lang'), 'zh-Hans-CN');
+    assert.equal(doc.querySelector('.search__label').textContent, '查询');
+    assert.equal(doc.querySelector('.search__submit').textContent, '查找');
+    assert.match(doc.querySelector('#site-footer').textContent, /共 4 条/);
+    assert.match(doc.querySelector('#site-footer').textContent, /更新于 2025-01-03/);
+    assert.match(doc.querySelector('.search__hint').textContent, /浏览全部词条/);
+    // Index in Chinese: names in Chinese and grouped by pinyin initial
+    // (B inary Search / H 焓 hán / S 熵 shāng / Z 注入测试 zhù).
+    assert.deepEqual(
+      [...doc.querySelectorAll('h2.letter')].map((node) => node.textContent),
+      ['B', 'H', 'S', 'Z'],
+    );
+    assert.deepEqual(
+      [...doc.querySelectorAll('a.term')].map((node) => node.textContent),
+      ['Binary Search', '焓', '熵', '注入测试'],
+    );
+  });
+
+  it('falls back to English for entries without Chinese', () => {
+    // 焓 / 熵 / 注入测试 have Chinese names; Binary Search does not.
+    assert.deepEqual(
+      [...doc.querySelectorAll('a.term')].map((node) => node.textContent).includes('Binary Search'),
+      true,
+    );
+  });
+
+  it('switches the entry page too, and shows the other language as a subtitle', () => {
+    site.app.openEntry('entropy');
+    assert.equal(doc.querySelector('.entry-title').textContent, '熵');
+    assert.match(doc.querySelector('.crumbs').textContent, /← 索引/);
+    assert.match(doc.querySelector('.meta-line').textContent, /别名：/);
+    assert.equal(doc.querySelector('.entry-alt').textContent, 'Entropy');
+    assert.match(doc.querySelector('.prose').innerHTML, /<h3>定义<\/h3>/);
+  });
+
+  it('resolves wiki links written with Chinese names even in English mode', () => {
+    const first = site.app.getLocale();
+    site.app.setLocale('en');
+    site.app.openEntry('entropy');
+    const link = /** @type {HTMLAnchorElement} */ (doc.querySelector('.prose a.term-link'));
+    assert.equal(link.getAttribute('href'), '#/e/enthalpy');
+    assert.equal(link.textContent, '焓');
+    site.app.setLocale(first);
+  });
+
+  it('speaks Chinese for search errors as well', () => {
+    site.app.openEntryBack();
+    const input = /** @type {HTMLInputElement} */ (doc.querySelector('#q'));
+    input.value = '/[/';
+    fire(input, 'input');
+    assert.match(doc.querySelector('.search__hint').textContent, /正则表达式无效/);
+    input.value = '';
+    fire(input, 'input');
+  });
+
+  it('remembers the choice for the next visit', async () => {
+    // The same storage object stands in for "the same browser, next visit".
+    const storage = site.app.store ? memoryStorage() : memoryStorage();
+    const first = await startSite();
+    first.app.setLocale('zh');
+    // Boot again sharing the first app's storage via localStorage keys.
+    const shared = createStorage('ladr-test', { memoryOnly: true });
+    const second = await startSite({ storage: shared });
+    assert.equal(second.app.getLocale(), 'en');
+    second.app.setLocale('zh');
+    assert.equal(shared.get('locale', ''), 'zh');
+    const third = await startSite({ storage: shared });
+    assert.equal(third.app.getLocale(), 'zh');
+    assert.equal(third.dom.window.document.querySelector('#site-title').textContent, '概念词条库');
+    assert.equal(storage.get('unused', null), null);
+    first.app.destroy();
+    second.app.destroy();
+    third.app.destroy();
+  });
+
+  it('honours defaultLocale from config.json when nothing is stored', async () => {
+    const local = await startSite({ config: { site: { defaultLocale: 'zh' } } });
+    assert.equal(local.app.getLocale(), 'zh');
+    assert.equal(local.dom.window.document.querySelector('#site-title').textContent, '概念词条库');
+    local.app.destroy();
   });
 });
 
@@ -483,14 +627,14 @@ describe('deep links', () => {
     assert.equal(/** @type {HTMLInputElement} */ (localDoc.querySelector('#q')).value, '熵');
     assert.deepEqual(
       [...localDoc.querySelectorAll('a.term')].map((node) => node.textContent),
-      ['熵'],
+      ['Entropy'],
     );
     local.app.destroy();
   });
 
   it('opens an entry directly from the hash', async () => {
     const local = await startSite({ url: 'https://example.test/ladr/#/e/enthalpy' });
-    assert.equal(local.dom.window.document.querySelector('.entry-title').textContent, '焓');
+    assert.equal(local.dom.window.document.querySelector('.entry-title').textContent, 'Enthalpy');
     local.app.destroy();
   });
 
@@ -505,14 +649,17 @@ describe('failures and shortcuts', () => {
   it('explains a missing data file', async () => {
     const local = await startSite({ failEntries: true });
     const localDoc = local.dom.window.document;
-    assert.match(localDoc.querySelector('.status').textContent, /无法读取/);
+    assert.match(localDoc.querySelector('.status').textContent, /Could not read/);
     assert.equal(localDoc.querySelector('#view').querySelectorAll('a.term').length, 0);
     local.app.destroy();
   });
 
   it('shows a warning when config.json points at an absolute URL', async () => {
     const local = await startSite({ config: { data: { url: 'https://example.com/entries.json' } } });
-    assert.match(local.dom.window.document.querySelector('.status').textContent, /相对路径/);
+    assert.match(
+      local.dom.window.document.querySelector('.status').textContent,
+      /not a relative path/,
+    );
     local.app.destroy();
   });
 
@@ -525,7 +672,7 @@ describe('failures and shortcuts', () => {
     assert.equal(localDoc.activeElement, localDoc.querySelector('#q'));
 
     local.app.openEntry('entropy');
-    assert.equal(localDoc.querySelector('.entry-title').textContent, '熵');
+    assert.equal(localDoc.querySelector('.entry-title').textContent, 'Entropy');
     localDoc.body.dispatchEvent(new local.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     assert.equal(localDoc.querySelectorAll('a.term').length, 4);
     local.app.destroy();

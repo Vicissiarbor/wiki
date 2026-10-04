@@ -46,11 +46,13 @@ export function termLinkResolver(collection) {
  * @param {import('../core/entry.js').Entry|null} [model.previous]
  * @param {import('../core/entry.js').Entry|null} [model.next]
  * @param {string} [model.updatedLabel]
+ * @param {(key: string, params?: Record<string, unknown>) => string} [model.t]
  * @returns {DocumentFragment}
  */
 export function renderEntry(model) {
   const { entry, collection } = model;
-  const updatedLabel = model.updatedLabel ?? '更新于';
+  const t = model.t ?? ((/** @type {string} */ key) => key);
+  const updatedLabel = model.updatedLabel ?? t('footer.updated');
   const ranges = findMatches(entry.name, model.parsed, { limit: 8 });
 
   /** @type {Array<Node|null>} */
@@ -58,19 +60,31 @@ export function renderEntry(model) {
 
   body.push(
     el('nav.crumbs', {}, [
-      el('a', { href: '#/', text: '← 索引' }),
+      el('a', { href: '#/', text: t('entry.index') }),
       entry.updatedAt
-        ? el('span.updated', { text: ` ${updatedLabel} ${formatDate(entry.updatedAt)}` })
+        ? el('span.updated', {
+            text: ` ${t('footer.updated', { label: updatedLabel, date: formatDate(entry.updatedAt) })}`,
+          })
         : null,
     ]),
   );
 
   body.push(el('h1.entry-title', {}, [highlight(entry.name, ranges)]));
 
+  // The name in the other language: the entry itself is bilingual, so show it.
+  if (entry.alternateName) {
+    body.push(
+      el('p.entry-alt', {
+        text: entry.alternateName,
+        lang: /[\u4e00-\u9fff]/.test(entry.alternateName) ? 'zh-CN' : 'en',
+      }),
+    );
+  }
+
   if (entry.aliases.length > 0) {
     body.push(
       el('p.meta-line', {}, [
-        el('span.meta-label', { text: '别名：' }),
+        el('span.meta-label', { text: t('entry.aliasesLabel') }),
         ...entry.aliases.flatMap((alias, index) => [
           index > 0 ? '、' : null,
           el('a', { href: `#/?q=${encodeURIComponent(alias)}`, text: alias }),
@@ -82,7 +96,7 @@ export function renderEntry(model) {
   if (entry.tags.length > 0) {
     body.push(
       el('p.meta-line', {}, [
-        el('span.meta-label', { text: '标签：' }),
+        el('span.meta-label', { text: t('entry.tagsLabel') }),
         ...entry.tags.flatMap((tag, index) => [
           index > 0 ? '、' : null,
           el('a', { href: `#/?q=${encodeURIComponent(`tag:${tag}`)}`, text: tag }),
@@ -99,7 +113,7 @@ export function renderEntry(model) {
   if (content !== '') {
     body.push(el('div.prose', { html: content }));
   } else {
-    body.push(el('p.empty__hint', { text: '这个词条还没有正文。' }));
+    body.push(el('p.empty__hint', { text: t('entry.noContent') }));
   }
 
   const neighbours = /** @type {Array<Node|null>} */ ([]);
@@ -125,7 +139,7 @@ export function renderEntry(model) {
     body.push(el('nav.pager', {}, neighbours));
   }
 
-  body.push(el('p.meta-line.meta-line--id', { text: `id: ${entry.id}` }));
+  body.push(el('p.meta-line.meta-line--id', { text: t('entry.id', { id: entry.id }) }));
 
   return /** @type {DocumentFragment} */ (fragment(body));
 }
@@ -134,15 +148,16 @@ export function renderEntry(model) {
  * The page shown when a shared link points at an entry that no longer exists.
  *
  * @param {string} entryId
+ * @param {(key: string, params?: Record<string, unknown>) => string} [t]
  * @returns {DocumentFragment}
  */
-export function renderMissingEntry(entryId) {
+export function renderMissingEntry(entryId, t = (/** @type {string} */ key) => key) {
   return /** @type {DocumentFragment} */ (
     fragment([
-      el('nav.crumbs', {}, [el('a', { href: '#/', text: '← 索引' })]),
-      el('h1.entry-title', { text: '没有这个词条' }),
-      el('p', { text: `地址里的 id “${entryId}” 在当前数据里找不到。可能是词条被重命名或删除了。` }),
-      el('p.empty__hint', { text: '可以在索引页用搜索框按名称查找。' }),
+      el('nav.crumbs', {}, [el('a', { href: '#/', text: t('entry.index') })]),
+      el('h1.entry-title', { text: t('entry.missingTitle') }),
+      el('p', { text: t('entry.missingBody', { id: entryId }) }),
+      el('p.empty__hint', { text: t('entry.missingHint') }),
     ])
   );
 }

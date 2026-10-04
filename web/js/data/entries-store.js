@@ -9,6 +9,7 @@
 
 import { EntryCollection } from '../core/collection.js';
 import { DataSourceError } from '../core/errors.js';
+import { createTranslator } from '../core/i18n.js';
 
 /** localStorage key of the cached bundle. */
 export const CACHE_KEY = 'cache.entries.v1';
@@ -35,7 +36,7 @@ export const CACHE_KEY = 'cache.entries.v1';
 
 /**
  * @param {{url: string, storage: {get: Function, set: Function}, fetchImpl?: typeof fetch,
- *   timeoutMs?: number}} options
+ *   timeoutMs?: number, t?: (key: string, params?: Record<string, unknown>) => string}} options
  * @returns {EntriesStore}
  */
 export function createEntriesStore(options) {
@@ -43,6 +44,9 @@ export function createEntriesStore(options) {
   const storage = options.storage;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? 15_000;
+  /** Messages follow the interface language; the store can be re-translated. */
+  const t = (/** @type {string} */ key, /** @type {Record<string, unknown>} */ params) =>
+    (options.t ?? createTranslator('en'))(key, params);
 
   /** @type {EntriesState} */
   let state = {
@@ -81,7 +85,7 @@ export function createEntriesStore(options) {
    */
   async function download(refresh) {
     if (typeof fetchImpl !== 'function') {
-      throw new DataSourceError('当前环境不支持 fetch。', { kind: 'format' });
+      throw new DataSourceError(t('status.issueHint.http'), { kind: 'format' });
     }
     if (typeof AbortController !== 'function') {
       const response = await fetchImpl(url, { cache: refresh ? 'no-store' : 'no-cache' });
@@ -101,8 +105,8 @@ export function createEntriesStore(options) {
       }
       const aborted = error instanceof Error && error.name === 'AbortError';
       throw new DataSourceError(
-        aborted ? `读取 ${url} 超时。` : `无法读取 ${url}，请检查网络后重试。`,
-        { kind: aborted ? 'network' : 'network', cause: error },
+        aborted ? t('store.timeout', { url }) : t('store.unreachable', { url }),
+        { kind: 'network', cause: error },
       );
     } finally {
       clearTimeout(timer);
@@ -117,8 +121,8 @@ export function createEntriesStore(options) {
     if (!response.ok) {
       throw new DataSourceError(
         response.status === 404
-          ? `找不到词条文件 ${url}（HTTP 404）。`
-          : `读取词条文件失败（HTTP ${response.status}）：${url}`,
+          ? t('store.notFound', { url })
+          : t('store.httpError', { status: response.status, url }),
         { kind: response.status === 404 ? 'missing' : 'http' },
       );
     }
@@ -126,13 +130,24 @@ export function createEntriesStore(options) {
     try {
       return JSON.parse(text);
     } catch (error) {
-      throw new DataSourceError(`${url} 不是合法的 JSON。`, { kind: 'format', cause: error });
+      throw new DataSourceError(t('store.notJson', { url }), { kind: 'format', cause: error });
     }
   }
 
   return {
     getState: () => state,
     getCollection: () => state.collection,
+
+    /**
+     * Switch the language used for load errors (the UI re-renders on a switch).
+     *
+     * @param {(key: string, params?: Record<string, unknown>) => string} translate
+     * @returns {void}
+     */
+    setTranslator(translate) {
+      // eslint-disable-next-line no-param-reassign
+      options.t = translate;
+    },
 
     subscribe(listener) {
       listeners.add(listener);

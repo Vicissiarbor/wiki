@@ -19,6 +19,7 @@ import { isValidTimestamp } from '../web/js/core/entry.js';
 import { renderMarkdown } from '../web/js/core/markdown.js';
 import { parseQuery, searchEntries } from '../web/js/core/search.js';
 import { normalizeConfig } from '../web/js/config.js';
+import { LOCALES, localizedText } from '../web/js/core/locale.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -140,9 +141,18 @@ describe('web/config.json', () => {
   it('is valid, portable and free of secrets', async () => {
     const config = normalizeConfig(await readJson('web/config.json'));
     assert.equal(config.data.url.startsWith('./'), true);
-    assert.equal(typeof config.site.title, 'string');
     assert.ok(!JSON.stringify(config).includes('token'));
     assert.ok(!JSON.stringify(config).includes('http'));
+  });
+
+  it('gives the site a title and a tagline in every language', async () => {
+    const config = normalizeConfig(await readJson('web/config.json'));
+    for (const locale of LOCALES) {
+      assert.ok(localizedText(config.site.title, locale) !== '', `${locale} title`);
+      assert.ok(localizedText(config.site.tagline, locale) !== '', `${locale} tagline`);
+      assert.ok(localizedText(config.site.updatedLabel, locale) !== '', `${locale} updatedLabel`);
+    }
+    assert.ok(LOCALES.includes(config.site.defaultLocale), config.site.defaultLocale);
   });
 
   it('has no footer note any more', async () => {

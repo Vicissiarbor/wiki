@@ -60,15 +60,26 @@ export function isValidTimestamp(value) {
   return !Number.isNaN(Date.parse(text.replace(' ', 'T')));
 }
 
-/** Keys of a stored entry, in the order used when serializing. */
+/**
+ * Keys of a stored entry, in the order used when serializing.
+ *
+ * English is the base language (never missing) and each optional Chinese field
+ * sits right next to the field it translates — see core/locale.js.
+ */
 export const ENTRY_KEYS = Object.freeze([
   'id',
   'name',
+  'nameZh',
   'aliases',
+  'aliasesZh',
   'initial',
+  'initialZh',
   'tags',
+  'tagsZh',
   'summary',
+  'summaryZh',
   'content',
+  'contentZh',
   'createdAt',
   'updatedAt',
 ]);
@@ -166,14 +177,27 @@ export function normalizeEntry(raw) {
 
   const id = cleanLine(source.id);
 
+  const initialZh = cleanLine(source.initialZh).toUpperCase();
+  if (initialZh !== '' && !INITIAL_PATTERN.test(initialZh)) {
+    throw new ValidationError(`词条 “${name}” 的 initialZh 必须是 A-Z 或 #。`, [
+      { field: 'initialZh', message: `非法值 “${initialZh}”` },
+    ]);
+  }
+
   return {
     id,
     name,
+    nameZh: cleanLine(source.nameZh),
     aliases: cleanStringList(source.aliases),
+    aliasesZh: cleanStringList(source.aliasesZh),
     initial,
+    initialZh,
     tags: cleanStringList(source.tags),
+    tagsZh: cleanStringList(source.tagsZh),
     summary: cleanLine(source.summary),
+    summaryZh: cleanLine(source.summaryZh),
     content: cleanText(source.content),
+    contentZh: cleanText(source.contentZh),
     createdAt: typeof source.createdAt === 'string' ? cleanText(source.createdAt) : '',
     updatedAt: typeof source.updatedAt === 'string' ? cleanText(source.updatedAt) : '',
   };
@@ -231,6 +255,49 @@ export function inspectEntry(raw, context = {}) {
 
   if (entry.name.length > LIMITS.NAME) {
     issues.push({ field: 'name', code: 'too-long', message: `名称不能超过 ${LIMITS.NAME} 个字符。` });
+  }
+  if (entry.nameZh.length > LIMITS.NAME) {
+    issues.push({ field: 'nameZh', code: 'too-long', message: `中文名不能超过 ${LIMITS.NAME} 个字符。` });
+  }
+  if (entry.summaryZh.length > LIMITS.SUMMARY) {
+    issues.push({
+      field: 'summaryZh',
+      code: 'too-long',
+      message: `中文简介不能超过 ${LIMITS.SUMMARY} 个字符。`,
+    });
+  }
+  if (entry.contentZh.length > LIMITS.CONTENT) {
+    issues.push({
+      field: 'contentZh',
+      code: 'too-long',
+      message: `中文正文不能超过 ${LIMITS.CONTENT} 个字符。`,
+    });
+  }
+  if (entry.aliasesZh.length > LIMITS.ALIASES) {
+    issues.push({ field: 'aliasesZh', code: 'too-many', message: `中文别名最多 ${LIMITS.ALIASES} 个。` });
+  }
+  if (entry.tagsZh.length > LIMITS.TAGS) {
+    issues.push({ field: 'tagsZh', code: 'too-many', message: `中文标签最多 ${LIMITS.TAGS} 个。` });
+  }
+  for (const alias of entry.aliasesZh) {
+    if (alias.length > LIMITS.ALIAS) {
+      issues.push({
+        field: 'aliasesZh',
+        code: 'too-long',
+        message: `中文别名 “${alias.slice(0, 20)}…” 超过 ${LIMITS.ALIAS} 个字符。`,
+      });
+      break;
+    }
+  }
+  for (const tag of entry.tagsZh) {
+    if (tag.length > LIMITS.TAG) {
+      issues.push({
+        field: 'tagsZh',
+        code: 'too-long',
+        message: `中文标签 “${tag}” 超过 ${LIMITS.TAG} 个字符。`,
+      });
+      break;
+    }
   }
   if (entry.summary.length > LIMITS.SUMMARY) {
     issues.push({

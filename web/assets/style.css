@@ -96,10 +96,52 @@ h3 {
 
 /* ------------------------------------------------------------- 页头 */
 
+.masthead__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
 .masthead h1 {
   margin: 0 0 0.25rem;
   font-size: 1.5rem;
   letter-spacing: 0.01em;
+}
+
+.lang {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.lang__label {
+  font-size: 0.8rem;
+}
+
+.lang__item {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font-family: var(--serif);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lang__item.is-active {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: default;
+}
+
+.lang__sep {
+  color: var(--rule-strong);
 }
 
 .tagline {
@@ -263,6 +305,13 @@ mark {
   margin: 0 0 0.5rem;
   font-size: 1.6rem;
   word-break: break-word;
+}
+
+/* 词条在另一种语言里的名字 */
+.entry-alt {
+  margin: -0.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
 }
 
 .meta-line {
