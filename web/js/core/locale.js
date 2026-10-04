@@ -105,9 +105,8 @@ function localizedList(value, locale) {
 /**
  * Pick the display version of an entry.
  *
- * Returns a plain object (not a frozen entry) with every display field resolved,
- * plus `alternateName`: the name in the *other* language, shown as a subtitle so
- * a bilingual glossary still reads well in either language.
+ * Returns a plain object (not a frozen entry) with every display field resolved:
+ * one language only, never a mix of both.
  *
  * @param {import('./entry.js').Entry} entry
  * @param {string} locale
@@ -138,7 +137,6 @@ export function localizeEntry(entry, locale) {
   };
 
   const name = pick('name', '');
-  const alternateName = chinese ? String(source.name ?? '') : String(source.nameZh ?? '');
 
   return {
     id: source.id,
@@ -150,10 +148,6 @@ export function localizeEntry(entry, locale) {
     content: pick('content', ''),
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
-    /** The name in the other language, or '' when it is the same/absent. */
-    alternateName: alternateName === name ? '' : alternateName,
-    /** True when at least one field came from the Chinese overlay. */
-    translated: chinese,
   };
 }
 

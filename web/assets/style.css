@@ -307,13 +307,6 @@ mark {
   word-break: break-word;
 }
 
-/* 词条在另一种语言里的名字 */
-.entry-alt {
-  margin: -0.25rem 0 0.5rem;
-  color: var(--ink-soft);
-  font-size: 1rem;
-}
-
 .meta-line {
   margin: 0 0 0.4rem;
   font-size: 0.9rem;

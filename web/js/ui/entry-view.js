@@ -71,16 +71,6 @@ export function renderEntry(model) {
 
   body.push(el('h1.entry-title', {}, [highlight(entry.name, ranges)]));
 
-  // The name in the other language: the entry itself is bilingual, so show it.
-  if (entry.alternateName) {
-    body.push(
-      el('p.entry-alt', {
-        text: entry.alternateName,
-        lang: /[\u4e00-\u9fff]/.test(entry.alternateName) ? 'zh-CN' : 'en',
-      }),
-    );
-  }
-
   if (entry.aliases.length > 0) {
     body.push(
       el('p.meta-line', {}, [

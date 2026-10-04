@@ -90,8 +90,6 @@ describe('localizeEntry', () => {
     assert.deepEqual(entry.tags, ['Math']);
     assert.equal(entry.summary, 'An ordered pair.');
     assert.equal(entry.content, 'A *complex number* is $(a, b)$.');
-    // The other language is offered as a subtitle.
-    assert.equal(entry.alternateName, '复数');
   });
 
   it('uses the Chinese overlay when asked for Chinese', () => {
@@ -101,8 +99,6 @@ describe('localizeEntry', () => {
     assert.deepEqual(entry.tags, ['数学']);
     assert.equal(entry.summary, '一个有序对。');
     assert.equal(entry.content, '复数是一个有序对 $(a, b)$。');
-    // English is never missing, so it becomes the subtitle.
-    assert.equal(entry.alternateName, 'Complex Number');
   });
 
   it('falls back per field, not per entry', () => {
@@ -116,15 +112,24 @@ describe('localizeEntry', () => {
     const entry = localizeEntry(partly, 'zh');
     assert.equal(entry.name, 'Tree');
     assert.equal(entry.content, '一棵树。');
-    assert.equal(entry.alternateName, '', 'the name is the same in both languages');
+  });
+
+  it('never mixes the two languages in one view', () => {
+    // Chinese mode shows only the Chinese side (or the English fallback per field).
+    const zhEntry = localizeEntry(bilingual, 'zh');
+    assert.equal(zhEntry.name, '复数');
+    assert.deepEqual(zhEntry.tags, ['数学']);
+    // English mode must not leak the Chinese name anywhere.
+    const enEntry = localizeEntry(bilingual, 'en');
+    assert.equal(enEntry.name, 'Complex Number');
+    assert.deepEqual(enEntry.tags, ['Math']);
+    assert.equal(JSON.stringify(enEntry).includes('复数'), false);
   });
 
   it('shows English for an entry without any Chinese', () => {
     const entry = localizeEntry(englishOnly, 'zh');
     assert.equal(entry.name, 'abandon');
     assert.equal(entry.content, 'never abandon a friend');
-    assert.equal(entry.alternateName, 'abandon' === entry.name ? '' : entry.alternateName);
-    assert.equal(entry.alternateName, '');
   });
 
   it('keeps timestamps and the id untouched', () => {

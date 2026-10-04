@@ -556,6 +556,7 @@ describe('language switch', () => {
   });
 
   it('falls back to English for entries without Chinese', () => {
+    site.app.setLocale('zh');
     // 焓 / 熵 / 注入测试 have Chinese names; Binary Search does not.
     assert.deepEqual(
       [...doc.querySelectorAll('a.term')].map((node) => node.textContent).includes('Binary Search'),
@@ -563,16 +564,35 @@ describe('language switch', () => {
     );
   });
 
-  it('switches the entry page too, and shows the other language as a subtitle', () => {
+  it('switches the entry page too, and shows one language only', () => {
     site.app.openEntry('entropy');
     assert.equal(doc.querySelector('.entry-title').textContent, '熵');
     assert.match(doc.querySelector('.crumbs').textContent, /← 索引/);
     assert.match(doc.querySelector('.meta-line').textContent, /别名：/);
-    assert.equal(doc.querySelector('.entry-alt').textContent, 'Entropy');
     assert.match(doc.querySelector('.prose').innerHTML, /<h3>定义<\/h3>/);
+    // No English name anywhere on the Chinese page.
+    assert.equal(doc.querySelector('.entry-alt'), null);
+    assert.ok(!doc.querySelector('#view').textContent.includes('Entropy'));
+  });
+
+  it('never attaches the other language to a name', () => {
+    // English page: the title is the English name, and no subtitle is added.
+    site.app.setLocale('en');
+    site.app.openEntry('entropy');
+    assert.equal(doc.querySelector('.entry-title').textContent, 'Entropy');
+    assert.equal(doc.querySelector('.entry-alt'), null);
+    assert.equal(doc.querySelectorAll('.entry-title').length, 1);
+
+    // Chinese page: the title is the Chinese name only.
+    site.app.setLocale('zh');
+    site.app.openEntry('entropy');
+    assert.equal(doc.querySelector('.entry-title').textContent, '熵');
+    assert.equal(doc.querySelector('.entry-alt'), null);
+    assert.ok(!doc.querySelector('.entry-title').textContent.includes('Entropy'));
   });
 
   it('resolves wiki links written with Chinese names even in English mode', () => {
+    site.app.setLocale('zh');
     const first = site.app.getLocale();
     site.app.setLocale('en');
     site.app.openEntry('entropy');
@@ -583,6 +603,7 @@ describe('language switch', () => {
   });
 
   it('speaks Chinese for search errors as well', () => {
+    site.app.setLocale('zh');
     site.app.openEntryBack();
     const input = /** @type {HTMLInputElement} */ (doc.querySelector('#q'));
     input.value = '/[/';
@@ -593,6 +614,7 @@ describe('language switch', () => {
   });
 
   it('remembers the choice for the next visit', async () => {
+    site.app.setLocale('zh');
     // The same storage object stands in for "the same browser, next visit".
     const storage = site.app.store ? memoryStorage() : memoryStorage();
     const first = await startSite();
