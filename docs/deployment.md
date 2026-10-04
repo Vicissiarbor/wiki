@@ -20,7 +20,7 @@
 
 ```bash
 npm install          # 只为跑测试；网站本身零依赖
-npm test             # 211 个测试，应该全绿
+npm test             # 213 个测试，应该全绿
 
 # 静态站点（只读）
 npm run dev          # http://127.0.0.1:8787/

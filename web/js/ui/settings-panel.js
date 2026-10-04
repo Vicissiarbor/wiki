@@ -73,7 +73,15 @@ export function createSettingsPanel(options) {
 
   /** @type {HTMLElement[]} */
   const panels = [];
-  for (const source of describeSources()) {
+  // `allowLocalEditing: false` lets an operator hide the "keep a copy in this
+  // browser" option (a shared deployment may not want it), unless it is active.
+  const offered = describeSources().filter(
+    (source) =>
+      source.id !== 'local' ||
+      options.config.allowLocalEditing !== false ||
+      options.config.source === 'local',
+  );
+  for (const source of offered) {
     const radio = /** @type {HTMLInputElement} */ (
       el('input', {
         type: 'radio',
@@ -119,7 +127,7 @@ export function createSettingsPanel(options) {
       '细粒度令牌，只勾选该仓库的 Contents: Read and write。保存在本机浏览器，可随时在 GitHub 撤销。',
     ),
   );
-  sources.get('local').pane.append(
+  sources.get('local')?.pane.append(
     el('p.settings__hint', {
       text: '本地编辑模式下，改动保存在当前浏览器，可随时导出 JSON 再手工提交到仓库。',
     }),

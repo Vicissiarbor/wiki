@@ -56,7 +56,7 @@ const ENTRIES = {
 };
 
 /**
- * @param {{entries?: object, url?: string, failEntries?: boolean}} [options]
+ * @param {{entries?: object, url?: string, failEntries?: boolean, config?: object}} [options]
  * @returns {Promise<{dom: JSDOM, app: object, repository: object}>}
  */
 async function startApp(options = {}) {
@@ -70,7 +70,7 @@ async function startApp(options = {}) {
   const fetchImpl = async (input) => {
     const url = String(input);
     if (url.includes('config.json')) {
-      return response({}, 404);
+      return options.config ? response(options.config, 200) : response({}, 404);
     }
     if (url.includes('entries.json')) {
       if (options.failEntries) {
@@ -467,6 +467,30 @@ describe('UI - editing', () => {
     confirm.click();
     await new Promise((resolve) => setTimeout(resolve, 40));
     assert.equal(app.repository.collection.size, before - 1);
+  });
+});
+
+describe('UI - settings dialog', () => {
+  it('offers all four data sources by default', async () => {
+    const app = await startApp();
+    const doc = app.dom.window.document;
+    const tools = [...doc.querySelectorAll('.toolbar .button')].find((node) => node.textContent === '设置');
+    /** @type {HTMLElement} */ (tools).click();
+    const labels = [...doc.querySelectorAll('.settings__source-label')].map((node) => node.textContent);
+    assert.deepEqual(labels, ['静态 JSON（只读）', '本地编辑（仅此设备）', 'GitHub 仓库（可写）', '自建后端（可写）']);
+    assert.equal(doc.querySelector('.modal').textContent.includes('数据源设置'), true);
+    app.app.destroy();
+  });
+
+  it('hides local editing when config.json disallows it', async () => {
+    const app = await startApp({ config: { allowLocalEditing: false } });
+    const doc = app.dom.window.document;
+    const button = [...doc.querySelectorAll('.toolbar .button')].find((node) => node.textContent === '设置');
+    /** @type {HTMLElement} */ (button).click();
+    const labels = [...doc.querySelectorAll('.settings__source-label')].map((node) => node.textContent);
+    assert.ok(!labels.includes('本地编辑（仅此设备）'));
+    assert.equal(labels.length, 3);
+    app.app.destroy();
   });
 });
 
