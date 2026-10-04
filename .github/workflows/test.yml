@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # jsdom is the only dependency, and it is used by tests only.
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Run the test suite
+        run: npm test
+
+      - name: Check the data file
+        run: node -e "
+          const fs = require('node:fs');
+          const doc = JSON.parse(fs.readFileSync('web/data/entries.json', 'utf8'));
+          if (!Array.isArray(doc.entries)) throw new Error('web/data/entries.json 缺少 entries 数组');
+          console.log('entries:', doc.entries.length);
+          "
