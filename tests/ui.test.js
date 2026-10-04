@@ -28,7 +28,7 @@ const ENTRIES = {
       tags: ['物理'],
       summary: '度量不确定性',
       content:
-        '## 定义\n\nH(X) = -Σ p log p\n\n见 [[焓]] 与 [[不存在的词条]]\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
+        '## 定义\n\nH(X) = -Σ p log p\n\n公式 $a + bi$ 与\n\n$$H = U + pV$$\n\n见 [[焓]] 与 [[不存在的词条]]\n\n| a | b |\n| --- | --- |\n| 1 | 2 |',
       updatedAt: '2025-01-02T00:00:00.000Z',
     },
     {
@@ -38,6 +38,7 @@ const ENTRIES = {
       tags: ['物理'],
       summary: '热力学状态函数',
       content: 'H = U + pV',
+      updatedAt: '2025-01-03',
     },
     {
       id: 'xss',
@@ -205,9 +206,18 @@ describe('index page', () => {
     assert.match(doc.querySelector('.search__hint').textContent, /浏览全部词条/);
   });
 
-  it('shows the totals in the footer', () => {
-    assert.match(doc.querySelector('#site-footer').textContent, /共 4 条/);
-    assert.match(doc.querySelector('#site-footer').textContent, /更新于 2025-01-01/);
+  it('shows the totals and the latest update derived from the entries', () => {
+    const footer = doc.querySelector('#site-footer').textContent;
+    assert.match(footer, /共 4 条/);
+    // 2025-01-03 comes from 焓's updatedAt (day precision), not from the
+    // document-level timestamp — nothing has to be hand-maintained.
+    assert.match(footer, /更新于 2025-01-03/);
+  });
+
+  it('no longer prints the removed footer note', () => {
+    const footer = doc.querySelector('#site-footer').textContent;
+    assert.ok(!footer.includes('通过提交仓库更新'));
+    assert.equal(doc.querySelector('.footer__note'), null);
   });
 
   it('sets the document title from the config', () => {
@@ -402,6 +412,67 @@ describe('entry pages', () => {
     assert.equal(site.dom.window.__XSS__, false);
     assert.equal(view.querySelector('a[href^="javascript"]'), null);
     assert.match(view.textContent, /危险/);
+  });
+});
+
+describe('math and dates on an entry page', () => {
+  /** @type {Awaited<ReturnType<typeof startSite>>} */
+  let site;
+  /** @type {Document} */
+  let doc;
+
+  before(async () => {
+    // Stand in for KaTeX (the real one is vendor code exercised in math.test.js).
+    /** @type {Array<{tex: string, displayMode: boolean}>} */
+    const calls = [];
+    /** @type {any} */ (globalThis).katex = {
+      render(/** @type {string} */ tex, /** @type {HTMLElement} */ node, /** @type {any} */ options) {
+        calls.push({ tex, displayMode: Boolean(options.displayMode) });
+        node.textContent = `R(${tex})`;
+      },
+    };
+    globalThis.__katexCalls = calls;
+    site = await startSite();
+    doc = site.dom.window.document;
+    DomEvent = site.dom.window.Event;
+    site.app.openEntry('entropy');
+    // renderMath is asynchronous (it may have to fetch the library).
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+
+  after(() => {
+    site.app.destroy();
+    delete /** @type {any} */ (globalThis).katex;
+    delete /** @type {any} */ (globalThis).__katexCalls;
+  });
+
+  it('hands every formula to KaTeX with the right mode', () => {
+    const calls = /** @type {any[]} */ (globalThis.__katexCalls);
+    assert.deepEqual(
+      calls.map((call) => [call.tex, call.displayMode]),
+      [
+        ['a + bi', false],
+        ['H = U + pV', true],
+      ],
+    );
+  });
+
+  it('marks the rendered formulas and keeps them in the DOM', () => {
+    const nodes = doc.querySelectorAll('.prose [data-tex]');
+    assert.equal(nodes.length, 2);
+    assert.equal(nodes[0].classList.contains('is-rendered'), true);
+    assert.match(nodes[0].textContent, /^R\(a \+ bi\)$/);
+  });
+
+  it('shows a day-precision timestamp exactly as written', () => {
+    site.app.openEntry('enthalpy');
+    assert.match(doc.querySelector('.crumbs').textContent, /更新于 2025-01-03/);
+  });
+
+  it('does not shift a day-precision date across time zones', () => {
+    // 2025-01-03 must never render as 2025-01-02 (UTC parsing would do that).
+    site.app.openEntry('enthalpy');
+    assert.ok(!doc.querySelector('.crumbs').textContent.includes('2025-01-02'));
   });
 });
 

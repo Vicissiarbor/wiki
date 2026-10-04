@@ -13,7 +13,8 @@
  * Supported: headings, paragraphs (single newline = line break), fenced code,
  * blockquotes, ordered/unordered lists with nesting, pipe tables (GitHub
  * style), horizontal rules, `code`, **bold**, *italic*, ~~strikethrough~~,
- * [links](url), ![images](url), bare URLs and [[wiki links]] to other entries.
+ * [links](url), ![images](url), bare URLs, [[wiki links]] to other entries and
+ * math ($…$, $$…$$, \(…\), \[…\]) handed to KaTeX by ui/math.js.
  *
  * Not supported (by design): raw HTML, footnotes, reference links.
  */
@@ -80,6 +81,107 @@ function restore(text, fragments) {
 }
 
 /**
+ * @param {Array<string>} fragments
+ * @param {string} tex TeX source, without delimiters.
+ * @param {boolean} display True for display (`$$…$$`) math.
+ * @returns {string} A placeholder holding the math element.
+ *
+ * The TeX is kept twice: in `data-tex` (so the renderer in ui/math.js can hand
+ * it to KaTeX) and as escaped text content (so the formula is still readable if
+ * KaTeX cannot be loaded). Nothing here depends on KaTeX — this module stays
+ * pure, and the dependency is only fetched when a page actually contains math.
+ */
+function pushMath(fragments, tex, display) {
+  const source = tex.trim();
+  const escaped = escapeHtml(source);
+  const className = display ? 'math math--display' : 'math math--inline';
+  return push(
+    fragments,
+    `<span class="${className}" data-tex="${escaped}" data-display="${display ? 'display' : 'inline'}">${escaped}</span>`,
+  );
+}
+
+/**
+ * @param {string} text
+ * @param {number} start Index of the first character after the opening `$`.
+ * @param {boolean} display True when looking for a closing `$$`.
+ * @returns {number} Index of the closing delimiter, or -1.
+ */
+function findMathClose(text, start, display) {
+  const width = display ? 2 : 1;
+  for (let index = start; index < text.length; index += 1) {
+    if (text[index] !== '$' || text[index - 1] === '\\') {
+      continue;
+    }
+    if (display ? text[index + 1] === '$' : text[index + 1] !== '$') {
+      // Inline math may not end on whitespace: that keeps "$5 and $6" as text.
+      if (display || !/\s/.test(text[index - 1] ?? '')) {
+        return index;
+      }
+    }
+    index += width - 1;
+  }
+  return -1;
+}
+
+/**
+ * Pull math spans out of a line before HTML escaping and emphasis run.
+ *
+ * Accepted delimiters: `$…$`, `$$…$$`, `\(…\)`, `\[…\]`. Code spans are already
+ * placeholders at this point, so TeX inside them is never touched.
+ *
+ * @param {string} text
+ * @param {Array<string>} fragments
+ * @returns {string} `text` with every formula replaced by a placeholder.
+ */
+function extractMath(text, fragments) {
+  let out = '';
+  let index = 0;
+
+  while (index < text.length) {
+    const character = text[index];
+
+    if (character === '\\' && (text[index + 1] === '(' || text[index + 1] === '[')) {
+      const close = text[index + 1] === '(' ? '\\)' : '\\]';
+      const end = text.indexOf(close, index + 2);
+      if (end !== -1) {
+        const tex = text.slice(index + 2, end);
+        if (tex.trim() !== '') {
+          out += pushMath(fragments, tex, text[index + 1] === '[');
+          index = end + 2;
+          continue;
+        }
+      }
+    }
+
+    if (character === '$' && text[index - 1] !== '\\') {
+      const display = text[index + 1] === '$';
+      const width = display ? 2 : 1;
+      const start = index + width;
+      if (text[start] === undefined || (!display && /\s/.test(text[start]))) {
+        out += character;
+        index += 1;
+        continue;
+      }
+      const close = findMathClose(text, start, display);
+      if (close !== -1) {
+        const tex = text.slice(start, close);
+        if (tex.trim() !== '') {
+          out += pushMath(fragments, tex, display);
+          index = close + width;
+          continue;
+        }
+      }
+    }
+
+    out += character;
+    index += 1;
+  }
+
+  return out;
+}
+
+/**
  * Render the inline part of a line (or paragraph).
  *
  * @param {string} text Raw Markdown text.
@@ -95,10 +197,13 @@ export function renderInline(text, options = {}) {
     push(fragments, `<code>${escapeHtml(code.trim())}</code>`),
   );
 
-  // 2. Everything else is escaped before any pattern is applied.
+  // 2. Math, before escaping: TeX keeps its backslashes, `^`, `_`, `*` and braces.
+  work = extractMath(work, fragments);
+
+  // 3. Everything else is escaped before any pattern is applied.
   work = escapeHtml(work);
 
-  // 3. Wiki links become placeholders so `[x](y)` handling cannot touch them.
+  // 4. Wiki links become placeholders so `[x](y)` handling cannot touch them.
   work = work.replace(/\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g, (match, target, label) => {
     const name = target.trim();
     const text = (label ?? target).trim();
@@ -109,7 +214,7 @@ export function renderInline(text, options = {}) {
     return push(fragments, `<span class="term-link term-link--missing">${text}</span>`);
   });
 
-  // 4. Images, then links.
+  // 5. Images, then links.
   work = work.replace(/!\[([^\]\n]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g, (match, alt, url) => {
     if (!isSafeUrl(url)) {
       return push(fragments, escapeHtml(match));
@@ -124,12 +229,12 @@ export function renderInline(text, options = {}) {
     return push(fragments, `<a href="${url}"${external}>${label || url}</a>`);
   });
 
-  // 5. Bare URLs (only when not already inside a generated anchor).
+  // 6. Bare URLs (only when not already inside a generated anchor).
   work = work.replace(/(^|[\s(（[【])(https?:\/\/[^\s<>()（）]+)/g, (match, prefix, url) =>
     `${prefix}${push(fragments, `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`)}`,
   );
 
-  // 6. Emphasis. Fragments are placeholders now, so URLs cannot be rewritten.
+  // 7. Emphasis. Fragments are placeholders now, so URLs and TeX cannot be rewritten.
   work = work
     .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
     .replace(/__(?=\S)([\s\S]*?\S)__/g, '<strong>$1</strong>')
@@ -137,7 +242,7 @@ export function renderInline(text, options = {}) {
     .replace(/\*(?=\S)([^*\n]*?\S)\*/g, '<em>$1</em>')
     .replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>');
 
-  // 7. Soft line breaks inside a paragraph are intentional in glossary notes.
+  // 8. Soft line breaks inside a paragraph are intentional in glossary notes.
   work = work.replace(/\n/g, '<br>\n');
 
   return restore(work, fragments);

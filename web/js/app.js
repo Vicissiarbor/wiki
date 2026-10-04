@@ -14,6 +14,7 @@ import { createStorage } from './util/storage.js';
 import { el, qs } from './ui/dom.js';
 import { renderEntry, renderMissingEntry } from './ui/entry-view.js';
 import { renderIndex } from './ui/index-view.js';
+import { renderMath } from './ui/math.js';
 import { INDEX_ROUTE, createRouter, parseHash } from './ui/router.js';
 import { createSearchBox } from './ui/search-box.js';
 import { createStatus } from './ui/status.js';
@@ -161,6 +162,10 @@ export async function boot(options = {}) {
       }),
     );
     searchBox.setHint('输入名称可以继续查询（=精确 / /正则/），按 Esc 返回索引。');
+    // KaTeX is fetched on demand, and only for pages that actually show a formula.
+    void renderMath(shell.view).catch((error) => {
+      console.warn('[SearchLADR] 公式渲染初始化失败', error);
+    });
   }
 
   /**
@@ -256,16 +261,15 @@ export async function boot(options = {}) {
    */
   function renderFooter(collection, entriesState) {
     const parts = [`共 ${collection.size} 条`];
-    if (collection.updatedAt) {
-      parts.push(`${config.site.updatedLabel} ${String(collection.updatedAt).slice(0, 10)}`);
+    // Derived from the entries, so nothing has to be hand-maintained.
+    const latest = collection.latestUpdatedAt() || String(collection.updatedAt ?? '').slice(0, 10);
+    if (latest !== '') {
+      parts.push(`${config.site.updatedLabel} ${latest}`);
     }
     if (entriesState.fetchedAt && entriesState.fromCache) {
       parts.push('显示本地缓存');
     }
-    shell.footer.replaceChildren(
-      el('p', { text: parts.join(' · ') }),
-      config.site.footer ? el('p.footer__note', { text: config.site.footer }) : null,
-    );
+    shell.footer.replaceChildren(el('p', { text: parts.join(' · ') }));
   }
 
   // ------------------------------------------------------------ shortcuts --

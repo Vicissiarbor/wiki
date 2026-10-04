@@ -124,6 +124,71 @@ describe('renderMarkdown - inline', () => {
   });
 });
 
+describe('renderMarkdown - math', () => {
+  it('marks inline math and keeps the TeX in data-tex', () => {
+    const html = renderInline('an order pair $(a, b)$, where $a,b \\in R$');
+    assert.equal((html.match(/class="math math--inline"/g) ?? []).length, 2);
+    assert.ok(html.includes('data-tex="(a, b)"'));
+    assert.ok(html.includes('data-tex="a,b \\in R"'));
+    assert.ok(html.includes('data-display="inline"'));
+  });
+
+  it('marks display math, including multi-line $$…$$', () => {
+    const html = renderMarkdown('$$\nH(X) = -\\sum_i p_i \\log p_i\n$$');
+    assert.equal((html.match(/class="math math--display"/g) ?? []).length, 1);
+    assert.ok(html.includes('data-display="display"'));
+    assert.ok(html.includes('-\\sum_i p_i'));
+  });
+
+  it('accepts the LaTeX bracket delimiters too', () => {
+    const inline = renderInline('\\(x^2\\)');
+    assert.ok(inline.includes('data-tex="x^2"'));
+    const display = renderInline('\\[E = mc^2\\]');
+    assert.ok(display.includes('data-display="display"'));
+    assert.ok(display.includes('data-tex="E = mc^2"'));
+  });
+
+  it('never treats a code span as math', () => {
+    const html = renderInline('写作 `$x$` 表示公式');
+    assert.equal(html, '写作 <code>$x$</code> 表示公式');
+  });
+
+  it('leaves currency alone', () => {
+    assert.equal(renderInline('价格 $5 和 $6 之间'), '价格 $5 和 $6 之间');
+    assert.equal(renderInline('$ x$ 与 $y $'), '$ x$ 与 $y $');
+  });
+
+  it('keeps TeX operators out of the emphasis rules', () => {
+    const html = renderInline('$a_i * b_j$ 与 **粗体**');
+    assert.ok(html.includes('data-tex="a_i * b_j"'));
+    assert.ok(!html.includes('<em>'));
+    assert.ok(html.includes('<strong>粗体</strong>'));
+  });
+
+  it('escapes the TeX so it can never become markup', () => {
+    const html = renderInline('$<img src=x onerror=1>$');
+    assert.ok(!html.includes('<img'));
+    assert.ok(html.includes('data-tex="&lt;img src=x onerror=1&gt;"'));
+    assert.equal(renderInline('$"quoted"$').includes('data-tex="&quot;quoted&quot;"'), true);
+  });
+
+  it('respects an escaped dollar sign', () => {
+    assert.equal(renderInline('\\$100 与 \\$200'), '\\$100 与 \\$200');
+  });
+
+  it('keeps a formula readable without KaTeX', () => {
+    // The TeX is also the visible text until ui/math.js renders it.
+    const html = renderInline('$a + bi$');
+    assert.ok(html.includes('data-tex="a + bi"'));
+    assert.ok(html.endsWith('>a + bi</span>'), html);
+  });
+
+  it('does not turn an unclosed dollar into a formula', () => {
+    assert.equal(renderInline('$unclosed'), '$unclosed');
+    assert.equal(renderInline('50$'), '50$');
+  });
+});
+
 describe('toPlainText', () => {
   it('flattens markdown for previews', () => {
     const text = toPlainText('# 标题\n\n- **粗体** `代码`\n\n| a | b |\n| --- | --- |\n| 1 | 2 |');
