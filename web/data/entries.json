@@ -10,7 +10,7 @@
 			"tagsZh": ["数学","线性代数"],
 			"summary": "definition of comliex number.",
 			"summaryZh": "复数的定义.",
-			"content": "- A *complex number* is an order pair $(a, b)$, where $a,b \\in \\mathbb{R}$, but we will write this as $a + bi$.\n- The set of all complex numbers is denoted by $\\mathbb{C}$: $$\\mathbb{C}={a+bi:a,b \\in \\mathbb{R}}.$$\n- *Addition* and *multiplication* on $\\mathbb{C}$ are defined by $$(a+bi)+(c+di)=(a+c)+(b+d)i,$$\n$$(a+bi)(c+di)=(ac-bd)+(ad+bc)i;$$\nhere $a,b,c,d \\in \\mathbb{R}$.",
+			"content": "- A *complex number* is an order pair $(a, b)$, where $a,b \\in \\mathbb{R}$, but we will write this as $a + bi$.\n- The set of all complex numbers is denoted by $\\mathbb{C}$: $$\\mathbb{C}={a+bi:a,b \\in \\mathbb{R}}.$$\n- *Addition* and *multiplication* on $\\mathbb{C}$ are defined by $$(a+bi)+(c+di)=(a+c)+(b+d)i,$$$$(a+bi)(c+di)=(ac-bd)+(ad+bc)i;$$here $a,b,c,d \\in \\mathbb{R}$.",
 			"createdAt": "2026-10-04",
 			"updatedAt": "2026-10-04"
 		}
