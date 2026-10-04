@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Only dev dependencies exist (jsdom for the UI tests); the deployed site has
+  # none, which is why this list is short on purpose.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'chore(deps)'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'
