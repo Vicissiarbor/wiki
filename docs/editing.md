@@ -23,7 +23,8 @@
   "aliases": ["放弃"],
   "tags": ["英语"],
   "summary": "放弃；抛弃。",
-  "content": "## 例句\n\n- abandon the plan\n- never abandon a friend"
+  "content": "## 例句\n\n- abandon the plan\n- never abandon a friend",
+  "updatedAt": "2026-10-04"
 }
 ```
 
@@ -32,7 +33,8 @@
 - `id` 必填且**全集合唯一**，只用字母、数字、`.`、`_`、`~`、`-`，它决定分享链接（`#/e/abandon`）；
 - `name` 必填且唯一（忽略大小写），界面和索引显示的就是它；
 - 首字母不用自己写：中文按拼音自动判断（`熵 → S`），多音字可以用 `"initial": "C"` 覆盖；
-- `createdAt` / `updatedAt` 可写可不写；写了会显示在词条页上。
+- **时间只需精确到日**：`"updatedAt": "2026-10-04"` 就行；页脚的"更新于"会自动取所有词条里最新的那个日期，不需要另外维护；
+- 正文可以用 Markdown 子集，外加 **KaTeX 公式**：行内写成 `$a + bi$`，独立公式写成 `$$…$$`（详见 [data-format.md](data-format.md)）。
 
 ```bash
 npm test                                    # 校验 JSON、重名、字段长度
@@ -44,11 +46,13 @@ git push
 
 直接改那个对象的字段。**不要改 `id`**（改了等于换了一个地址，旧链接会失效）。改完 `npm test` + `git push`。
 
-想让"最后更新"显示当天日期，就顺手把 `updatedAt` 改成今天的 ISO 时间：
+想让词条页显示"最后更新"，就顺手把 `updatedAt` 改成今天的日期（只到日即可）：
 
 ```json
-"updatedAt": "2025-02-01T00:00:00.000Z"
+"updatedAt": "2026-10-04"
 ```
+
+**不用去动文件开头那个 `updatedAt`**：页脚的日期是从词条数组里算出来的，把它删掉也不影响显示。
 
 ## 3. 删一个词条
 
@@ -66,7 +70,8 @@ git push
 
 ## 5. 用网页导出当前数据
 
-页面上的词条数据就是 `data/entries.json`，没有"导出"按钮也不需要——README 的页脚有指向该文件的链接（`./data/entries.json`）。想合并多个来源时，可以：
+页面上的词条数据就是仓库里的 `data/entries.json`，浏览器里直接访问
+`<站点地址>/data/entries.json` 就能看到原始 JSON，不需要"导出"按钮。想合并多个来源时，可以：
 
 1. 用任意脚本把外部数据转成 `{ "version": 1, "updatedAt": "...", "entries": [...] }`；
 2. 覆盖 `web/data/entries.json`；
@@ -84,8 +89,9 @@ npm test
 - JSON 语法与文档结构；
 - 每条词条的 `id` / `name` 合法性、唯一性，字段长度上限；
 - 每个词条都能算出首字母（否则会掉进 `#` 桶）；
-- 三个搜索模式都能在示例数据上跑通；
-- 页面引用的元素、相对路径、只读约束（不会有任何写请求）。
+- 三个搜索模式都能在**你自己的每条词条**上跑通（按名称正查）；
+- 时间戳合法（只到日或完整 ISO 都行）；
+- 正文能渲染、公式都被正确标记、页面引用的元素与相对路径、只读约束（不会有任何写请求）。
 
 `tests/data-files.test.js` 专门盯 `web/data/entries.json`，出错时会给出行号级别的提示。
 

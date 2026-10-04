@@ -8,8 +8,9 @@
 | 支持精确搜索与正则 | 查询语法：`=名称`、`/表达式/`、默认包含匹配（见 [search-syntax.md](search-syntax.md)） |
 | 只能用 GitHub Pages，不要服务器 | 纯静态：无后端、无写接口、无令牌；`web/` 目录即产物 |
 | 内容靠 git 维护 | 唯一数据源 `web/data/entries.json`，改完提交即发布（见 [editing.md](editing.md)） |
+| 支持 KaTeX 公式 | 正文里的 `$…$` / `$$…$$` 由内置的 KaTeX 渲染（见下文「数学公式」） |
 | 全部使用相对路径 | 所有引用都是 `./…`；`tests/architecture.test.js` 有专门的守卫测试 |
-| 可维护 | 纯函数核心 + 视图分离 + 170 个测试 + 架构守卫 |
+| 可维护 | 纯函数核心 + 视图分离 + 212 个测试 + 架构守卫 |
 
 ## 分层
 
@@ -74,7 +75,33 @@ GitHub Pages 没有服务端重写能力，无法把 `/e/entropy` 映射到 `ind
 - 不需要构建步骤把数据编译成别的格式；
 - 加载是**宽容**的：单条坏数据会被跳过并在页面上报告，不会让整页空白。
 
-### 6. 复古风格怎么实现
+### 6. 数学公式：核心保持纯，依赖按需加载
+
+KaTeX 是 271 KB 的第三方库（加字体共约 600 KB）。处理方式：
+
+- **核心只做标记，不做渲染**。`core/markdown.js` 在转义之前把公式抽成占位符，产出
+  `<span class="math" data-tex="…">…</span>`：TeX 同时存在属性和可见文本里。
+  好处有三个：TeX 不会被转义/强调规则破坏；核心依旧零依赖、可在 Node 里直接测；
+  即使 KaTeX 加载失败，读者看到的仍是公式原文（不是空白）。
+- **渲染放在 `ui/math.js`**，并且是惰性的：只有页面里真的存在 `[data-tex]` 时才注入
+  `assets/katex/katex.min.css` 与 `katex.min.js`（相对路径，靠 `document.baseURI` 解析，
+  所以子路径部署也对）。索引页永远不会为它付费。
+- **安全**：`trust: false`（禁用 `\href`/`\htmlClass` 这类 HTML 能力）、
+  `throwOnError: false`（写错的公式渲染成红色错误而不是整页崩掉）、
+  `output: 'htmlAndMathml'`（保留 MathML，屏幕阅读器与复制粘贴都正常）。
+- KaTeX 是仓库内的第三方文件，升级方式与保留清单写在 `web/assets/katex/NOTICE.md`。
+
+### 7. 时间戳与"最新更新"
+
+- 词条时间只需精确到**日**（`2026-10-04`），也接受完整 ISO-8601；
+  `ui/entry-view.js` 对"只到日"的值直接原样输出——若走 `Date` 解析，
+  按 UTC 解释的日期会在某些时区显示成前一天。
+- 页脚的"更新于"不再取文档级 `updatedAt`（那种字段最容易忘记更新而变成假信息），
+  而是由 `EntryCollection.latestUpdatedAt()` 从词条自己的
+  `updatedAt`/`createdAt` 里取最大值；两者都是 `YYYY-MM-DD` 或 ISO，
+  字符串比较即可正确排序。文档级 `updatedAt` 变成可选、仅作历史兼容。
+
+### 8. 复古风格怎么实现
 
 - 单色 + 衬线字体（Georgia / 宋体），经典下划线链接，分隔线用 `<hr>` 和 `border-bottom`；
 - 保留 `visited` 链接颜色（现代框架常抹掉它，但那是"目录页"的关键手感）；
@@ -109,12 +136,13 @@ GitHub Pages 没有服务端重写能力，无法把 `/e/entropy` 映射到 `ind
 | `web/js/core/search.js` | 查询解析、字段权重、匹配、高亮区间、正则安全阀 |
 | `web/js/core/initials.js` + `pinyin-table.js` | 首字母（中文按拼音） |
 | `web/js/core/sort.js` | A–Z 分桶与排序（`Intl.Collator`，中文按拼音） |
-| `web/js/core/markdown.js` | 安全的最小 Markdown 渲染器 |
+| `web/js/core/markdown.js` | 安全的最小 Markdown 渲染器 + 公式抽取（纯函数） |
 | `web/js/ui/index-view.js` | 索引页渲染（字母 + 链接 + `<mark>`） |
 | `web/js/ui/entry-view.js` | 词条页渲染（含 `[[词条]]` 解析与上下条） |
 | `web/js/ui/search-box.js` | 输入框 + 查找按钮 + 提示行（无模式下拉） |
 | `web/js/ui/router.js` | `#/` 与 `#/e/<id>` 的解析、写回、分享链接 |
 | `web/js/ui/status.js` | 加载 / 警告 / 错误的一行反馈 |
+| `web/js/ui/math.js` | 按需加载内置 KaTeX 并渲染 `[data-tex]`，失败则保留原文 |
 | `web/js/ui/dom.js` | `el()` 等 DOM 小工具（无框架） |
 | `web/js/util/storage.js` | localStorage 包装（缓存用，失败自动退化为内存） |
 
@@ -125,6 +153,7 @@ GitHub Pages 没有服务端重写能力，无法把 `/e/entropy` 映射到 `ind
 | 改标题 / 标语 / 数据路径 | `web/config.json` |
 | 加字段（如"来源"） | `core/entry.js` 的 `ENTRY_KEYS` + `normalizeEntry`，再在 `entry-view.js` 显示 |
 | 支持更多 Markdown 语法 | `core/markdown.js`，并在 `tests/markdown.test.js` 补用例 |
+| 升级 KaTeX / 换数学库 | `web/assets/katex/NOTICE.md` + `ui/math.js`（只依赖 `render(tex, node, options)`） |
 | 索引排成多列 | `web/assets/style.css` 里的 `.terms` |
 | 换首字母规则 | `core/initials.js`（表来自 `tools/gen_pinyin_table.py`） |
 | 恢复网页编辑 | `git log --all -- web/js/data/` 找历史实现（会重新引入令牌与外部接口风险） |
@@ -133,9 +162,9 @@ GitHub Pages 没有服务端重写能力，无法把 `/e/entropy` 映射到 `ind
 
 | 层次 | 文件 | 关注点 |
 | --- | --- | --- |
-| 单元 | `entry` `collection` `initials` `search` `markdown` `config` `util` | 规则与边界：重名、超长、正则、注入、转义、多音字 |
+| 单元 | `entry` `collection` `initials` `search` `markdown` `math` `config` `util` | 规则与边界：重名、超长、正则、注入、转义、多音字、公式抽取、KaTeX 降级 |
 | 集成 | `entries-store` | 读取、缓存、先画后刷、坏数据跳过、404、非法 JSON、过期响应 |
-| 整页 | `ui`（jsdom，真实 `index.html`） | 字母分组与链接、三种搜索、高亮、词条页、`[[词条]]`、上下条、深链、注入防护、快捷键 |
-| 守卫 | `architecture` `data-files` | 核心纯度、相对路径、只读约束、示例数据与页面外壳的有效性 |
+| 整页 | `ui`（jsdom，真实 `index.html`） | 字母分组与链接、三种搜索、高亮、词条页、`[[词条]]`、上下条、公式渲染接线、只到日的日期、深链、注入防护、快捷键 |
+| 守卫 | `architecture` `data-files` | 核心纯度、相对路径、只读约束、数据文件（含时间戳与公式）、KaTeX 资源与页面外壳的有效性 |
 
 运行：`npm test`（Node 内置测试运行器，无需测试框架）。

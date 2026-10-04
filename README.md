@@ -15,6 +15,7 @@ B
 - **纯静态**：原生 HTML + CSS + ES 模块，**没有构建步骤**、没有框架、没有 CDN、没有后端、没有数据库。
 - **查询**：包含匹配（默认）、精确匹配（`=名字`）、正则表达式（`/表达式/`），可加字段前缀（`tag:物理`、`content:/定理/`）。
 - **索引**：按首字母分组排序，中文按拼音（`熵 → S`），`#` 桶放数字与符号开头。
+- **公式**：词条正文里用 `$…$` / `$$…$$` 写 KaTeX（仓库内自带，不依赖 CDN，只在出现公式的页面才加载）。
 - **内容维护**：改 `web/data/entries.json` 并提交（见 [docs/editing.md](docs/editing.md)）。站点只读，没有任何写接口、令牌或服务器。
 - **多设备**：同一份提交到仓库的 JSON，任何设备打开网页都能查。
 
@@ -24,7 +25,7 @@ B
 
 ```bash
 npm install        # 只装 jsdom，测试用；站点本身零依赖
-npm test           # 170 个测试
+npm test           # 212 个测试
 npm run preview    # http://127.0.0.1:8080/
 ```
 
@@ -68,6 +69,7 @@ web/                     站点本体（GitHub Pages 发布的就是这个目录
   data/entries.json      全部词条（唯一数据源）
   assets/style.css       手写样式（单色、衬线、分隔线）
   assets/favicon.svg
+  assets/katex/          内置 KaTeX 0.17.0（min.js + min.css + woff2 字体 + 许可）
   js/
     boot.js              页面入口
     app.js               组装层：读取、渲染、路由、快捷键
@@ -82,12 +84,12 @@ web/                     站点本体（GitHub Pages 发布的就是这个目录
       sort.js            排序与 A–Z 分组
       markdown.js        安全的最小 Markdown 渲染器
       errors.js
-    ui/                  视图层：索引、词条页、搜索框、状态行、路由、DOM 小工具
+    ui/                  视图层：索引、词条页、搜索框、状态行、路由、公式渲染、DOM 小工具
     util/storage.js      localStorage 包装（缓存用）
 tools/
   serve.js               本地预览用的静态服务器（仅开发用，不参与部署）
   gen_pinyin_table.py    重新生成拼音首字母表
-tests/                   170 个测试：单元、集成、jsdom 整页、架构守卫
+tests/                   212 个测试：单元、集成、jsdom 整页、架构与数据守卫
 docs/                    数据格式、搜索语法、编辑方式、部署、架构
 ```
 
@@ -96,7 +98,8 @@ docs/                    数据格式、搜索语法、编辑方式、部署、�
 - **没有构建步骤**：`web/` 就是产物。改完直接刷新浏览器；发布就是 `git push`。
 - **核心与界面分离**：`core/`、`data/` 里不出现 `document`/`window`/`localStorage`（`tests/architecture.test.js` 强制检查），所以搜索、排序、校验、Markdown 全部可以在 Node 里直接测。
 - **只读**：没有写请求、没有令牌、没有服务器，站点的外部面只有"读取一个同源 JSON 文件"。
-- **安全默认**：Markdown 先转义再渲染，链接只允许 `http/https/mailto` 与相对地址；正则查询有长度上限、输入截断、灾难性回溯拦截与时间预算。
+- **安全默认**：Markdown 先转义再渲染，链接只允许 `http/https/mailto` 与相对地址；公式交给 KaTeX 时关掉了 `trust`（禁止 `\href` 之类的 HTML 能力）；正则查询有长度上限、输入截断、灾难性回溯拦截与时间预算。
+- **零维护元数据**：页脚的「更新于」从词条数组里取最新日期，不需要手动维护任何时间戳；时间写 `2026-10-04` 这种只到日的格式即可。
 - **可分享**：`#/?q=熵` 是一次搜索，`#/e/entropy` 是一个词条，直接发给手机就能打开。
 
 细节见 [docs/architecture.md](docs/architecture.md)。
@@ -113,4 +116,9 @@ docs/                    数据格式、搜索语法、编辑方式、部署、�
 
 ## 许可
 
-MIT（见 `LICENSE`）。拼音首字母表由 [pypinyin](https://github.com/mozillazg/python-pinyin)（MIT）生成，`tools/gen_pinyin_table.py` 保留了完整的再生成方式。
+MIT（见 `LICENSE`）。
+
+第三方资源（都随仓库分发，不使用 CDN）：
+
+- 拼音首字母表由 [pypinyin](https://github.com/mozillazg/python-pinyin)（MIT）生成，`tools/gen_pinyin_table.py` 保留了完整的再生成方式；
+- 数学公式由 [KaTeX](https://katex.org/) 0.17.0（MIT）渲染，见 `web/assets/katex/NOTICE.md`（含只保留 woff2 字体、如何升级的说明）。

@@ -113,6 +113,7 @@ cd web && python3 -m http.server 8000
 | 提示"有 N 条词条格式不对，已跳过" | 那几条缺少 `name`、`id` 格式不对或 id 重复；`npm test` 会给出具体位置 |
 | 提示"不是相对路径" | `config.json` 里的 `data.url` 写成了绝对地址；本站约定只用相对路径 |
 | 推送后页面还是旧的 | 等 Pages 的 Actions 跑完，再强制刷新（Ctrl/Cmd+Shift+R） |
+| 公式显示成灰底的 TeX 原文 | KaTeX 没加载成功（`assets/katex/` 没提交或被拦）。检查该目录是否存在，或看控制台的加载报错 |
 | 打开页面显示"页面无法启动" | 多半是用 `file://` 打开的，改用 `npm run preview` 或 Pages 地址 |
 | 中文首字母不对（如"重庆"跑到 Z） | 逐字查表无法判断多音字；给该词条加 `"initial": "C"` 覆盖 |
 | 正则查询提示"灾难性回溯" | 表达式里有 `(a+)+`、`(a\|a)+`、`.*.*` 这类会指数级回溯的写法，改写为 `a+` 等安全形式（见 [search-syntax.md](search-syntax.md)） |
@@ -122,7 +123,7 @@ cd web && python3 -m http.server 8000
 
 ## 7. 上线检查清单
 
-- [ ] `npm test` 全绿（170 个测试）
+- [ ] `npm test` 全绿（212 个测试）
 - [ ] `web/data/entries.json` 已换成自己的词条，且 JSON 能解析
 - [ ] Pages 的 Source 已设置，Actions 里部署成功
 - [ ] 用 `https://<用户名>.github.io/<仓库名>/` 打开，索引能显示
