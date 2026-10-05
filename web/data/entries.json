@@ -2,6 +2,60 @@
 	"version": 1,
 	"entries": [
 		{
+			"id": "linearCombination",
+			"name": "Linear Combination",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of linear combination.",
+			"content": "A *linear combination* of a list $v_1,...,v_m$ of vectors in $V$ is a vector of the form $$a_1v_1 + \\dots + a_mv_m,$$where$a_1,...,a_m \\in F$.",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "directSum",
+			"name": "Direct Sum",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of direct sum.",
+			"content": "Suppose $V_1,...,V_m$ are [[subspace]]s of $V$.\n- The [[sum of subspace]]s $V_1 + \\dots + V_m$ is called a *direct sum* if each elements of $V_1 + \\dots + V_m$ can be written in only one way as a sum $v_1 + \\dots + v_m$, where each $v_k \\in V_k$\n- If $V_1 + \\dots + V_m$ is a direct sum, then $V_1 \\oplus \\dots \\oplus V_m$ denotes $V_1 + \\dots + V_m$, with the $\\oplus$ notation serving as an indication that this is a direct sum.\n# direct sum of two subspaces\nSuppose $U$ and $W$ are subspaces of $V$. Then$$U+W \\text{ is a direct sum }\\Leftrightarrow U \\cap W = \\{0\\}$$",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "sumOfSubspaces",
+			"name": "Sum of Subspace",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of sum of subspaces.",
+			"content": "Suppose $V_1,...,V_m$ are [[subspace]]s of $V$. The *sum* of $V_1,...,V_m$, denoted by $V_1 + \\dots + V_m$, is the set of all possible sums of elements of $V_1,...,V_m$. More precisely,$$V_1 + \\dots + V_m=\\{v_1 + \\dots + v_m : v_1 \\in V_1,...,v_m \\in V_m\\}.$$",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "subspace",
+			"name": "Subspace",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of subspace.",
+			"content": "A subset $U$ of $V$ is called a *subspace* of $V$ if $U$ is also a vector space with the same additive identity, addition, and scalar multiplication as on $V$.\n# Read more\n[[Scalar Multiplication in F^n]]",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "complexVectorSpace",
+			"name": "Complex Vector Space",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of complex vector space.",
+			"content": "A [[vector space]] over $C$ is called a *complex vector space*\n# Read more:\n[[Real Vector Space]]",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "realVectorSpace",
+			"name": "Real Vector Space",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of real vector space.",
+			"content": "A [[vector space]] over $R$ is called a *real vector space*\n# Read more:\n[[Complex Vector Space]]",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
 			"id": "vectorSpace",
 			"name": "Vector Space",
 			"tags": ["Math","Linear Algebra","Definition"],
