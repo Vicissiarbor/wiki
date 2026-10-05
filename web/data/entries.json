@@ -2,11 +2,47 @@
 	"version": 1,
 	"entries": [
 		{
+			"id": "vectorSpace",
+			"name": "Vector Space",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of vector space.",
+			"content": "A *vector space* is a set $V$ along  with an addition on $V$ and s scalar multiplication on $V$ such that the following properties hold.\n# commutativity\n$u+v=v+u$ for all $u,v \\in V$.\n# associativity\n$(u+v)+w=u+(v+w)$ and $(ab)v=a(bv)$ for all $u,v,w \\in V$ and for all $a,b \\in F$.\n# additive identity\nThere exists an element $0 \\in V$ such that $v+0=v$ for all $v \\in V$.\n# additive inverse\nFor every $v \\in V$, there exists $w \\in V$ such that $v+w=0$.\n# nultiplicative identity\n$1v=v$ for all $v \\in V$.\n# aistributive properties\n$a(u+v)=au+av$ and $(a+b)v = av+bv$ for all $a,b\\in F$ and all $u,v \\in V$.",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "scalarMultiplicationInFN",
+			"name": "Scalar Multiplication in F^n",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of scalar multiplication in F^n.",
+			"content": "The *prodect* of a number $\\lambda$ and a vector in $F^n$ is computed by multiplying each coordinate of the vector by $\\lambda$:$$\\lambda (x_1,...,x_n)=(\\lambda x_1,...,\\lambda x_n);$$here $\\lambda \\in F$ and $(x_1,...,x_n) \\in F$.",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "additionInFN",
+			"name": "Addition in F^n",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of addition in F^n.",
+			"content": "*Addition* in $F^n$ is defined by adding corresponding coordinates:$$(x_1,...,x_n)+(y_1,...,y_n)=(x_1+y_1,...,x_n+y_n).$$",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
+			"id": "list",
+			"name": "List",
+			"tags": ["Math","Linear Algebra","Definition"],
+			"summary": "definition of list.",
+			"content": "- Suppose $n$ is a nonnegative integer. A *list* of length $n$ is an ordered collection of $n$ elements (which might be numbers, other lists, or more abstract objects).\n- Two lists are equal if and only if they have the same length and the same elements in the same order",
+			"createdAt": "2026-10-05",
+			"updatedAt": "2026-10-05"
+		},
+		{
 			"id": "complexNumber",
 			"name": "Complex Number",
 			"nameZh": "复数",
 			"aliases": [],
-			"tags": ["Math","Linear Algebra"],
+			"tags": ["Math","Linear Algebra","Definition"],
 			"tagsZh": ["数学","线性代数"],
 			"summary": "definition of comliex number.",
 			"summaryZh": "复数的定义.",
