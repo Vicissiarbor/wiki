@@ -2,6 +2,62 @@
 	"version": 1,
 	"entries": [
 		{
+			"id": "onetooneCorrespondece",
+			"name": "One-to-one Correspondece",
+			"aliases":"bijection",
+			"tags": ["Math","Discrete Math","Definition"],
+			"summary": "definition of one-to-one correspondece",
+			"content": "The function $f$ is a *one-to-one correspondence*, or a *bijection*, if it is both [[one-to-one]] and [[onto]]. We also say that such a function is *bijective*.",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
+			"id": "surjection",
+			"name": "Surjection",
+			"aliases":"onto",
+			"tags": ["Math","Discrete Math","Definition"],
+			"summary": "definition of surjection",
+			"content": "A function $f$ from $A$ to $B$ is called *onto*, or a *serjection*, if and only if for every element $b \\in B$ there is an element $a \\in A$ with $f(a)=b$. A function $f$ is called *surjective* if it is onto.",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
+			"id": "injection",
+			"name": "Injection",
+			"aliases":["one-to-one function", "one-to-one"],
+			"tags": ["Math","Discrete Math","Definition"],
+			"summary": "definition of injection",
+			"content": "A function $f$ is said to be *one-to-one*, or an *injection*, if and only if $f(a)=f(b)$ implies that $a=b$ for all $a$ and $b$ in the domain of $f$. A function is said to be *injective* is it is one-to-one.",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
+			"id": "schroderBernsteinTheorem",
+			"name": "Schröder–Bernstein Theorem",
+			"tags": ["Math","Discrete Math","Theorem"],
+			"content": "If $A$ and $B$ are sets with $|A| \\leq |B|$ and $|B| \\leq |A|$, then $|A|=|B|$. In other words, if there are [[one-to-one function]]s $f$ from $A$ to $B$ and $g$ from $B$ to $A$, then there is a [[one-to-one correspondece]] between $A$ and $B$.\n# Read more\n*[Division by three](https://math.dartmouth.edu/~doyle/docs/three/three.pdf)*",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
+			"id": "sameCardinality",
+			"name": "Same Cardinality",
+			"tags": ["Math","Discrete Math","Definition"],
+			"summary": "definition of same cardinality",
+			"content": "The sets $A$ and $B$ have the *same cardinality* if and only if there is a [[one-to-one correspondence]] from $A$ to $B$. When $A$ and $B$ have the same cardinality, we write $|A|=|B|$.",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
+			"id": "countableStes",
+			"name": "Countable Stes",
+			"tags": ["Math","Discrete Math","Definition"],
+			"summary": "definition of countable stes",
+			"content": "A set that is either finite or has the same cardinality as the set if positive intergers is called *countable*. A set that is not countable is called *uncountable*. When an infinite set $S$ is countable, we denote the carfinality of $S$ by $\\aleph_0$(where $\\aleph$ is aleph, the first letter of the Hebrew alphabet). We write $|S|=\\aleph_0$ and say that $S$ has cardinality \"aleph null.\"",
+			"createdAt": "2026-10-07",
+			"updatedAt": "2026-10-07"
+		},
+		{
 			"id": "arithmeticProgression",
 			"name": "Arithmetic Progression",
 			"tags": ["Math","Discrete Math","Definition"],
